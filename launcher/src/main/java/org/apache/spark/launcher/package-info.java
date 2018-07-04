@@ -26,7 +26,7 @@
  *
  * <p>
  * The {@link org.apache.spark.launcher.AbstractLauncher#startApplication(
- * org.apache.spark.launcher.SparkAppHandle.Listener...)}  method can be used to start Spark and
+ *org.apache.spark.launcher.SparkAppHandle.Listener...)}  method can be used to start Spark and
  * provide a handle to monitor and control the running application:
  * </p>
  *
@@ -88,6 +88,6 @@
  * <p>This method requires the calling code to manually manage the child process, including its
  * output streams (to avoid possible deadlocks). It's recommended that
  * {@link org.apache.spark.launcher.SparkLauncher#startApplication(
- *   org.apache.spark.launcher.SparkAppHandle.Listener...)} be used instead.</p>
+ *org.apache.spark.launcher.SparkAppHandle.Listener...)} be used instead.</p>
  */
 package org.apache.spark.launcher;

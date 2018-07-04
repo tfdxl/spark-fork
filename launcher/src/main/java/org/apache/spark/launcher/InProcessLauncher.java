@@ -41,78 +41,78 @@ import java.util.logging.Logger;
  */
 public class InProcessLauncher extends AbstractLauncher<InProcessLauncher> {
 
-  private static final Logger LOG = Logger.getLogger(InProcessLauncher.class.getName());
+    private static final Logger LOG = Logger.getLogger(InProcessLauncher.class.getName());
 
-  /**
-   * Starts a Spark application.
-   *
-   * @see AbstractLauncher#startApplication(SparkAppHandle.Listener...)
-   * @param listeners Listeners to add to the handle before the app is launched.
-   * @return A handle for the launched application.
-   */
-  @Override
-  public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
-    if (builder.isClientMode(builder.getEffectiveConfig())) {
-      LOG.warning("It's not recommended to run client-mode applications using InProcessLauncher.");
+    /**
+     * Starts a Spark application.
+     *
+     * @param listeners Listeners to add to the handle before the app is launched.
+     * @return A handle for the launched application.
+     * @see AbstractLauncher#startApplication(SparkAppHandle.Listener...)
+     */
+    @Override
+    public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
+        if (builder.isClientMode(builder.getEffectiveConfig())) {
+            LOG.warning("It's not recommended to run client-mode applications using InProcessLauncher.");
+        }
+
+        Method main = findSparkSubmit();
+        LauncherServer server = LauncherServer.getOrCreateServer();
+        InProcessAppHandle handle = new InProcessAppHandle(server);
+        for (SparkAppHandle.Listener l : listeners) {
+            handle.addListener(l);
+        }
+
+        String secret = server.registerHandle(handle);
+        setConf(LauncherProtocol.CONF_LAUNCHER_PORT, String.valueOf(server.getPort()));
+        setConf(LauncherProtocol.CONF_LAUNCHER_SECRET, secret);
+
+        List<String> sparkArgs = builder.buildSparkSubmitArgs();
+        String[] argv = sparkArgs.toArray(new String[sparkArgs.size()]);
+
+        String appName = CommandBuilderUtils.firstNonEmpty(builder.appName, builder.mainClass,
+                "<unknown>");
+        handle.start(appName, main, argv);
+        return handle;
     }
 
-    Method main = findSparkSubmit();
-    LauncherServer server = LauncherServer.getOrCreateServer();
-    InProcessAppHandle handle = new InProcessAppHandle(server);
-    for (SparkAppHandle.Listener l : listeners) {
-      handle.addListener(l);
+    @Override
+    InProcessLauncher self() {
+        return this;
     }
 
-    String secret = server.registerHandle(handle);
-    setConf(LauncherProtocol.CONF_LAUNCHER_PORT, String.valueOf(server.getPort()));
-    setConf(LauncherProtocol.CONF_LAUNCHER_SECRET, secret);
+    // Visible for testing.
+    Method findSparkSubmit() throws IOException {
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        if (cl == null) {
+            cl = getClass().getClassLoader();
+        }
 
-    List<String> sparkArgs = builder.buildSparkSubmitArgs();
-    String[] argv = sparkArgs.toArray(new String[sparkArgs.size()]);
+        Class<?> sparkSubmit;
+        // SPARK-22941: first try the new SparkSubmit interface that has better error handling,
+        // but fall back to the old interface in case someone is mixing & matching launcher and
+        // Spark versions.
+        try {
+            sparkSubmit = cl.loadClass("org.apache.spark.deploy.InProcessSparkSubmit");
+        } catch (Exception e1) {
+            try {
+                sparkSubmit = cl.loadClass("org.apache.spark.deploy.SparkSubmit");
+            } catch (Exception e2) {
+                throw new IOException("Cannot find SparkSubmit; make sure necessary jars are available.",
+                        e2);
+            }
+        }
 
-    String appName = CommandBuilderUtils.firstNonEmpty(builder.appName, builder.mainClass,
-      "<unknown>");
-    handle.start(appName, main, argv);
-    return handle;
-  }
+        Method main;
+        try {
+            main = sparkSubmit.getMethod("main", String[].class);
+        } catch (Exception e) {
+            throw new IOException("Cannot find SparkSubmit main method.", e);
+        }
 
-  @Override
-  InProcessLauncher self() {
-    return this;
-  }
-
-  // Visible for testing.
-  Method findSparkSubmit() throws IOException {
-    ClassLoader cl = Thread.currentThread().getContextClassLoader();
-    if (cl == null) {
-      cl = getClass().getClassLoader();
+        CommandBuilderUtils.checkState(Modifier.isStatic(main.getModifiers()),
+                "main method is not static.");
+        return main;
     }
-
-    Class<?> sparkSubmit;
-    // SPARK-22941: first try the new SparkSubmit interface that has better error handling,
-    // but fall back to the old interface in case someone is mixing & matching launcher and
-    // Spark versions.
-    try {
-      sparkSubmit = cl.loadClass("org.apache.spark.deploy.InProcessSparkSubmit");
-    } catch (Exception e1) {
-      try {
-        sparkSubmit = cl.loadClass("org.apache.spark.deploy.SparkSubmit");
-      } catch (Exception e2) {
-        throw new IOException("Cannot find SparkSubmit; make sure necessary jars are available.",
-          e2);
-      }
-    }
-
-    Method main;
-    try {
-      main = sparkSubmit.getMethod("main", String[].class);
-    } catch (Exception e) {
-      throw new IOException("Cannot find SparkSubmit main method.", e);
-    }
-
-    CommandBuilderUtils.checkState(Modifier.isStatic(main.getModifiers()),
-      "main method is not static.");
-    return main;
-  }
 
 }

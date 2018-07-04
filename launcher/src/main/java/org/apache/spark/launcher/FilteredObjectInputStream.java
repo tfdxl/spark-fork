@@ -17,8 +17,8 @@
 
 package org.apache.spark.launcher;
 
-import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectStreamClass;
 import java.util.Arrays;
@@ -30,24 +30,24 @@ import java.util.List;
  */
 class FilteredObjectInputStream extends ObjectInputStream {
 
-  private static final List<String> ALLOWED_PACKAGES = Arrays.asList(
-    "org.apache.spark.launcher.",
-    "java.lang.");
+    private static final List<String> ALLOWED_PACKAGES = Arrays.asList(
+            "org.apache.spark.launcher.",
+            "java.lang.");
 
-  FilteredObjectInputStream(InputStream is) throws IOException {
-    super(is);
-  }
-
-  @Override
-  protected Class<?> resolveClass(ObjectStreamClass desc)
-      throws IOException, ClassNotFoundException {
-
-    boolean isValid = ALLOWED_PACKAGES.stream().anyMatch(p -> desc.getName().startsWith(p));
-    if (!isValid) {
-      throw new IllegalArgumentException(
-        String.format("Unexpected class in stream: %s", desc.getName()));
+    FilteredObjectInputStream(InputStream is) throws IOException {
+        super(is);
     }
-    return super.resolveClass(desc);
-  }
+
+    @Override
+    protected Class<?> resolveClass(ObjectStreamClass desc)
+            throws IOException, ClassNotFoundException {
+
+        boolean isValid = ALLOWED_PACKAGES.stream().anyMatch(p -> desc.getName().startsWith(p));
+        if (!isValid) {
+            throw new IllegalArgumentException(
+                    String.format("Unexpected class in stream: %s", desc.getName()));
+        }
+        return super.resolveClass(desc);
+    }
 
 }
