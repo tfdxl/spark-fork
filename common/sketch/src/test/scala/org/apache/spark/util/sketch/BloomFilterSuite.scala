@@ -19,26 +19,17 @@ package org.apache.spark.util.sketch
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
-import scala.reflect.ClassTag
-import scala.util.Random
+import org.scalatest.FunSuite
 
-import org.scalatest.FunSuite // scalastyle:ignore funsuite
+import scala.reflect.ClassTag
+import scala.util.Random // scalastyle:ignore funsuite
 
 class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
   private final val EPSILON = 0.01
 
-  // Serializes and deserializes a given `BloomFilter`, then checks whether the deserialized
-  // version is equivalent to the original one.
-  private def checkSerDe(filter: BloomFilter): Unit = {
-    val out = new ByteArrayOutputStream()
-    filter.writeTo(out)
-    out.close()
-
-    val in = new ByteArrayInputStream(out.toByteArray)
-    val deserialized = BloomFilter.readFrom(in)
-    in.close()
-
-    assert(filter == deserialized)
+  def testItemType[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
+    testAccuracy[T](typeName, numItems)(itemGen)
+    testMergeInPlace[T](typeName, numItems)(itemGen)
   }
 
   def testAccuracy[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
@@ -72,6 +63,20 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
     }
   }
 
+  // Serializes and deserializes a given `BloomFilter`, then checks whether the deserialized
+  // version is equivalent to the original one.
+  private def checkSerDe(filter: BloomFilter): Unit = {
+    val out = new ByteArrayOutputStream()
+    filter.writeTo(out)
+    out.close()
+
+    val in = new ByteArrayInputStream(out.toByteArray)
+    val deserialized = BloomFilter.readFrom(in)
+    in.close()
+
+    assert(filter == deserialized)
+  }
+
   def testMergeInPlace[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
     test(s"mergeInPlace - $typeName") {
       // use a fixed seed to make the test predictable.
@@ -99,18 +104,21 @@ class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
     }
   }
 
-  def testItemType[T: ClassTag](typeName: String, numItems: Int)(itemGen: Random => T): Unit = {
-    testAccuracy[T](typeName, numItems)(itemGen)
-    testMergeInPlace[T](typeName, numItems)(itemGen)
+  testItemType[Byte]("Byte", 160) {
+    _.nextInt().toByte
   }
 
-  testItemType[Byte]("Byte", 160) { _.nextInt().toByte }
+  testItemType[Short]("Short", 1000) {
+    _.nextInt().toShort
+  }
 
-  testItemType[Short]("Short", 1000) { _.nextInt().toShort }
+  testItemType[Int]("Int", 100000) {
+    _.nextInt()
+  }
 
-  testItemType[Int]("Int", 100000) { _.nextInt() }
-
-  testItemType[Long]("Long", 100000) { _.nextLong() }
+  testItemType[Long]("Long", 100000) {
+    _.nextLong()
+  }
 
   testItemType[String]("String", 100000) { r => r.nextString(r.nextInt(512)) }
 

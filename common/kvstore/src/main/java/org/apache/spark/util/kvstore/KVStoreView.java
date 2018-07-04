@@ -18,7 +18,6 @@
 package org.apache.spark.util.kvstore;
 
 import com.google.common.base.Preconditions;
-
 import org.apache.spark.annotation.Private;
 
 /**
@@ -38,89 +37,89 @@ import org.apache.spark.annotation.Private;
 @Private
 public abstract class KVStoreView<T> implements Iterable<T> {
 
-  final Class<T> type;
+    final Class<T> type;
 
-  boolean ascending = true;
-  String index = KVIndex.NATURAL_INDEX_NAME;
-  Object first = null;
-  Object last = null;
-  Object parent = null;
-  long skip = 0L;
-  long max = Long.MAX_VALUE;
+    boolean ascending = true;
+    String index = KVIndex.NATURAL_INDEX_NAME;
+    Object first = null;
+    Object last = null;
+    Object parent = null;
+    long skip = 0L;
+    long max = Long.MAX_VALUE;
 
-  public KVStoreView(Class<T> type) {
-    this.type = type;
-  }
+    public KVStoreView(Class<T> type) {
+        this.type = type;
+    }
 
-  /**
-   * Reverses the order of iteration. By default, iterates in ascending order.
-   */
-  public KVStoreView<T> reverse() {
-    ascending = !ascending;
-    return this;
-  }
+    /**
+     * Reverses the order of iteration. By default, iterates in ascending order.
+     */
+    public KVStoreView<T> reverse() {
+        ascending = !ascending;
+        return this;
+    }
 
-  /**
-   * Iterates according to the given index.
-   */
-  public KVStoreView<T> index(String name) {
-    this.index = Preconditions.checkNotNull(name);
-    return this;
-  }
+    /**
+     * Iterates according to the given index.
+     */
+    public KVStoreView<T> index(String name) {
+        this.index = Preconditions.checkNotNull(name);
+        return this;
+    }
 
-  /**
-   * Defines the value of the parent index when iterating over a child index. Only elements that
-   * match the parent index's value will be included in the iteration.
-   *
-   * <p>
-   * Required for iterating over child indices, will generate an error if iterating over a
-   * parent-less index.
-   * </p>
-   */
-  public KVStoreView<T> parent(Object value) {
-    this.parent = value;
-    return this;
-  }
+    /**
+     * Defines the value of the parent index when iterating over a child index. Only elements that
+     * match the parent index's value will be included in the iteration.
+     *
+     * <p>
+     * Required for iterating over child indices, will generate an error if iterating over a
+     * parent-less index.
+     * </p>
+     */
+    public KVStoreView<T> parent(Object value) {
+        this.parent = value;
+        return this;
+    }
 
-  /**
-   * Iterates starting at the given value of the chosen index (inclusive).
-   */
-  public KVStoreView<T> first(Object value) {
-    this.first = value;
-    return this;
-  }
+    /**
+     * Iterates starting at the given value of the chosen index (inclusive).
+     */
+    public KVStoreView<T> first(Object value) {
+        this.first = value;
+        return this;
+    }
 
-  /**
-   * Stops iteration at the given value of the chosen index (inclusive).
-   */
-  public KVStoreView<T> last(Object value) {
-    this.last = value;
-    return this;
-  }
+    /**
+     * Stops iteration at the given value of the chosen index (inclusive).
+     */
+    public KVStoreView<T> last(Object value) {
+        this.last = value;
+        return this;
+    }
 
-  /**
-   * Stops iteration after a number of elements has been retrieved.
-   */
-  public KVStoreView<T> max(long max) {
-    Preconditions.checkArgument(max > 0L, "max must be positive.");
-    this.max = max;
-    return this;
-  }
+    /**
+     * Stops iteration after a number of elements has been retrieved.
+     */
+    public KVStoreView<T> max(long max) {
+        Preconditions.checkArgument(max > 0L, "max must be positive.");
+        this.max = max;
+        return this;
+    }
 
-  /**
-   * Skips a number of elements at the start of iteration. Skipped elements are not accounted
-   * when using {@link #max(long)}.
-   */
-  public KVStoreView<T> skip(long n) {
-    this.skip = n;
-    return this;
-  }
+    /**
+     * Skips a number of elements at the start of iteration. Skipped elements are not accounted
+     * when using {@link #max(long)}.
+     */
+    public KVStoreView<T> skip(long n) {
+        this.skip = n;
+        return this;
+    }
 
-  /**
-   * Returns an iterator for the current configuration.
-   */
-  public KVStoreIterator<T> closeableIterator() throws Exception {
-    return (KVStoreIterator<T>) iterator();
-  }
+    /**
+     * Returns an iterator for the current configuration.
+     */
+    public KVStoreIterator<T> closeableIterator() throws Exception {
+        return (KVStoreIterator<T>) iterator();
+    }
 
 }

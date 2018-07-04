@@ -17,35 +17,37 @@
 
 package org.apache.spark.network.util;
 
+import com.google.common.collect.ImmutableMap;
+import org.junit.Test;
+
 import java.util.Map;
 import java.util.Properties;
 
-import com.google.common.collect.ImmutableMap;
-import org.junit.Test;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 public class CryptoUtilsSuite {
 
-  @Test
-  public void testConfConversion() {
-    String prefix = "my.prefix.commons.config.";
+    @Test
+    public void testConfConversion() {
+        String prefix = "my.prefix.commons.config.";
 
-    String confKey1 = prefix + "a.b.c";
-    String confVal1 = "val1";
-    String cryptoKey1 = CryptoUtils.COMMONS_CRYPTO_CONFIG_PREFIX + "a.b.c";
+        String confKey1 = prefix + "a.b.c";
+        String confVal1 = "val1";
+        String cryptoKey1 = CryptoUtils.COMMONS_CRYPTO_CONFIG_PREFIX + "a.b.c";
 
-    String confKey2 = prefix.substring(0, prefix.length() - 1) + "A.b.c";
-    String confVal2 = "val2";
-    String cryptoKey2 = CryptoUtils.COMMONS_CRYPTO_CONFIG_PREFIX + "A.b.c";
+        String confKey2 = prefix.substring(0, prefix.length() - 1) + "A.b.c";
+        String confVal2 = "val2";
+        String cryptoKey2 = CryptoUtils.COMMONS_CRYPTO_CONFIG_PREFIX + "A.b.c";
 
-    Map<String, String> conf = ImmutableMap.of(
-      confKey1, confVal1,
-      confKey2, confVal2);
+        Map<String, String> conf = ImmutableMap.of(
+                confKey1, confVal1,
+                confKey2, confVal2);
 
-    Properties cryptoConf = CryptoUtils.toCryptoConf(prefix, conf.entrySet());
+        Properties cryptoConf = CryptoUtils.toCryptoConf(prefix, conf.entrySet());
 
-    assertEquals(confVal1, cryptoConf.getProperty(cryptoKey1));
-    assertFalse(cryptoConf.containsKey(cryptoKey2));
-  }
+        assertEquals(confVal1, cryptoConf.getProperty(cryptoKey1));
+        assertFalse(cryptoConf.containsKey(cryptoKey2));
+    }
 
 }

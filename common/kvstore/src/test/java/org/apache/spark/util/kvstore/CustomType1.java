@@ -21,43 +21,43 @@ import com.google.common.base.Objects;
 
 public class CustomType1 {
 
-  @KVIndex
-  public String key;
+    @KVIndex
+    public String key;
 
-  @KVIndex("id")
-  public String id;
+    @KVIndex("id")
+    public String id;
 
-  @KVIndex(value = "name", copy = true)
-  public String name;
+    @KVIndex(value = "name", copy = true)
+    public String name;
 
-  @KVIndex("int")
-  public int num;
+    @KVIndex("int")
+    public int num;
 
-  @KVIndex(value = "child", parent = "id")
-  public String child;
+    @KVIndex(value = "child", parent = "id")
+    public String child;
 
-  @Override
-  public boolean equals(Object o) {
-    if (o instanceof CustomType1) {
-      CustomType1 other = (CustomType1) o;
-      return id.equals(other.id) && name.equals(other.name);
+    @Override
+    public boolean equals(Object o) {
+        if (o instanceof CustomType1) {
+            CustomType1 other = (CustomType1) o;
+            return id.equals(other.id) && name.equals(other.name);
+        }
+        return false;
     }
-    return false;
-  }
 
-  @Override
-  public int hashCode() {
-    return id.hashCode();
-  }
+    @Override
+    public int hashCode() {
+        return id.hashCode();
+    }
 
-  @Override
-  public String toString() {
-    return Objects.toStringHelper(this)
-      .add("key", key)
-      .add("id", id)
-      .add("name", name)
-      .add("num", num)
-      .toString();
-  }
+    @Override
+    public String toString() {
+        return Objects.toStringHelper(this)
+                .add("key", key)
+                .add("id", id)
+                .add("name", name)
+                .add("num", num)
+                .toString();
+    }
 
 }

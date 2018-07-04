@@ -21,13 +21,19 @@ import javax.security.sasl.SaslException;
 
 interface SaslEncryptionBackend {
 
-  /** Disposes of resources used by the backend. */
-  void dispose();
+    /**
+     * Disposes of resources used by the backend.
+     */
+    void dispose();
 
-  /** Encrypt data. */
-  byte[] wrap(byte[] data, int offset, int len) throws SaslException;
+    /**
+     * Encrypt data.
+     */
+    byte[] wrap(byte[] data, int offset, int len) throws SaslException;
 
-  /** Decrypt data. */
-  byte[] unwrap(byte[] data, int offset, int len) throws SaslException;
+    /**
+     * Decrypt data.
+     */
+    byte[] unwrap(byte[] data, int offset, int len) throws SaslException;
 
 }

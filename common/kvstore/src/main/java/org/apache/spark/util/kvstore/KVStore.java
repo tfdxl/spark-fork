@@ -17,9 +17,9 @@
 
 package org.apache.spark.util.kvstore;
 
-import java.io.Closeable;
-
 import org.apache.spark.annotation.Private;
+
+import java.io.Closeable;
 
 /**
  * Abstraction for a local key/value store for storing app data.
@@ -64,66 +64,66 @@ import org.apache.spark.annotation.Private;
 @Private
 public interface KVStore extends Closeable {
 
-  /**
-   * Returns app-specific metadata from the store, or null if it's not currently set.
-   *
-   * <p>
-   * The metadata type is application-specific. This is a convenience method so that applications
-   * don't need to define their own keys for this information.
-   * </p>
-   */
-  <T> T getMetadata(Class<T> klass) throws Exception;
+    /**
+     * Returns app-specific metadata from the store, or null if it's not currently set.
+     *
+     * <p>
+     * The metadata type is application-specific. This is a convenience method so that applications
+     * don't need to define their own keys for this information.
+     * </p>
+     */
+    <T> T getMetadata(Class<T> klass) throws Exception;
 
-  /**
-   * Writes the given value in the store metadata key.
-   */
-  void setMetadata(Object value) throws Exception;
+    /**
+     * Writes the given value in the store metadata key.
+     */
+    void setMetadata(Object value) throws Exception;
 
-  /**
-   * Read a specific instance of an object.
-   *
-   * @param naturalKey The object's "natural key", which uniquely identifies it. Null keys
-   *                   are not allowed.
-   * @throws java.util.NoSuchElementException If an element with the given key does not exist.
-   */
-  <T> T read(Class<T> klass, Object naturalKey) throws Exception;
+    /**
+     * Read a specific instance of an object.
+     *
+     * @param naturalKey The object's "natural key", which uniquely identifies it. Null keys
+     *                   are not allowed.
+     * @throws java.util.NoSuchElementException If an element with the given key does not exist.
+     */
+    <T> T read(Class<T> klass, Object naturalKey) throws Exception;
 
-  /**
-   * Writes the given object to the store, including indexed fields. Indices are updated based
-   * on the annotated fields of the object's class.
-   *
-   * <p>
-   * Writes may be slower when the object already exists in the store, since it will involve
-   * updating existing indices.
-   * </p>
-   *
-   * @param value The object to write.
-   */
-  void write(Object value) throws Exception;
+    /**
+     * Writes the given object to the store, including indexed fields. Indices are updated based
+     * on the annotated fields of the object's class.
+     *
+     * <p>
+     * Writes may be slower when the object already exists in the store, since it will involve
+     * updating existing indices.
+     * </p>
+     *
+     * @param value The object to write.
+     */
+    void write(Object value) throws Exception;
 
-  /**
-   * Removes an object and all data related to it, like index entries, from the store.
-   *
-   * @param type The object's type.
-   * @param naturalKey The object's "natural key", which uniquely identifies it. Null keys
-   *                   are not allowed.
-   * @throws java.util.NoSuchElementException If an element with the given key does not exist.
-   */
-  void delete(Class<?> type, Object naturalKey) throws Exception;
+    /**
+     * Removes an object and all data related to it, like index entries, from the store.
+     *
+     * @param type       The object's type.
+     * @param naturalKey The object's "natural key", which uniquely identifies it. Null keys
+     *                   are not allowed.
+     * @throws java.util.NoSuchElementException If an element with the given key does not exist.
+     */
+    void delete(Class<?> type, Object naturalKey) throws Exception;
 
-  /**
-   * Returns a configurable view for iterating over entities of the given type.
-   */
-  <T> KVStoreView<T> view(Class<T> type) throws Exception;
+    /**
+     * Returns a configurable view for iterating over entities of the given type.
+     */
+    <T> KVStoreView<T> view(Class<T> type) throws Exception;
 
-  /**
-   * Returns the number of items of the given type currently in the store.
-   */
-  long count(Class<?> type) throws Exception;
+    /**
+     * Returns the number of items of the given type currently in the store.
+     */
+    long count(Class<?> type) throws Exception;
 
-  /**
-   * Returns the number of items of the given type which match the given indexed value.
-   */
-  long count(Class<?> type, String index, Object indexedValue) throws Exception;
+    /**
+     * Returns the number of items of the given type which match the given indexed value.
+     */
+    long count(Class<?> type, String index, Object indexedValue) throws Exception;
 
 }

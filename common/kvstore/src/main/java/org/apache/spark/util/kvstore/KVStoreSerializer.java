@@ -17,15 +17,15 @@
 
 package org.apache.spark.util.kvstore;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.spark.annotation.Private;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
+
 import static java.nio.charset.StandardCharsets.UTF_8;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import org.apache.spark.annotation.Private;
 
 /**
  * Serializer used to translate between app-defined types and the LevelDB store.
@@ -38,52 +38,52 @@ import org.apache.spark.annotation.Private;
 @Private
 public class KVStoreSerializer {
 
-  /**
-   * Object mapper used to process app-specific types. If an application requires a specific
-   * configuration of the mapper, it can subclass this serializer and add custom configuration
-   * to this object.
-   */
-  protected final ObjectMapper mapper;
+    /**
+     * Object mapper used to process app-specific types. If an application requires a specific
+     * configuration of the mapper, it can subclass this serializer and add custom configuration
+     * to this object.
+     */
+    protected final ObjectMapper mapper;
 
-  public KVStoreSerializer() {
-    this.mapper = new ObjectMapper();
-  }
-
-  public final byte[] serialize(Object o) throws Exception {
-    if (o instanceof String) {
-      return ((String) o).getBytes(UTF_8);
-    } else {
-      ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-      GZIPOutputStream out = new GZIPOutputStream(bytes);
-      try {
-        mapper.writeValue(out, o);
-      } finally {
-        out.close();
-      }
-      return bytes.toByteArray();
+    public KVStoreSerializer() {
+        this.mapper = new ObjectMapper();
     }
-  }
 
-  @SuppressWarnings("unchecked")
-  public final <T> T deserialize(byte[] data, Class<T> klass) throws Exception {
-    if (klass.equals(String.class)) {
-      return (T) new String(data, UTF_8);
-    } else {
-      GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(data));
-      try {
-        return mapper.readValue(in, klass);
-      } finally {
-        in.close();
-      }
+    public final byte[] serialize(Object o) throws Exception {
+        if (o instanceof String) {
+            return ((String) o).getBytes(UTF_8);
+        } else {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            GZIPOutputStream out = new GZIPOutputStream(bytes);
+            try {
+                mapper.writeValue(out, o);
+            } finally {
+                out.close();
+            }
+            return bytes.toByteArray();
+        }
     }
-  }
 
-  final byte[] serialize(long value) {
-    return String.valueOf(value).getBytes(UTF_8);
-  }
+    @SuppressWarnings("unchecked")
+    public final <T> T deserialize(byte[] data, Class<T> klass) throws Exception {
+        if (klass.equals(String.class)) {
+            return (T) new String(data, UTF_8);
+        } else {
+            GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(data));
+            try {
+                return mapper.readValue(in, klass);
+            } finally {
+                in.close();
+            }
+        }
+    }
 
-  final long deserializeLong(byte[] data) {
-    return Long.parseLong(new String(data, UTF_8));
-  }
+    final byte[] serialize(long value) {
+        return String.valueOf(value).getBytes(UTF_8);
+    }
+
+    final long deserializeLong(byte[] data) {
+        return Long.parseLong(new String(data, UTF_8));
+    }
 
 }

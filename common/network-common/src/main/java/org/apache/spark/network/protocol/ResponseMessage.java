@@ -17,7 +17,9 @@
 
 package org.apache.spark.network.protocol;
 
-/** Messages from the server to the client. */
+/**
+ * Messages from the server to the client.
+ */
 public interface ResponseMessage extends Message {
-  // token interface
+    // token interface
 }

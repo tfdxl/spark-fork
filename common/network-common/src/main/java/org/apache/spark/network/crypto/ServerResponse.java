@@ -17,69 +17,70 @@
 
 package org.apache.spark.network.crypto;
 
-import java.nio.ByteBuffer;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
 
+import java.nio.ByteBuffer;
+
 /**
  * Server's response to client's challenge.
- *
+ * <p>
  * Please see crypto/README.md for more details.
  */
 public class ServerResponse implements Encodable {
-  /** Serialization tag used to catch incorrect payloads. */
-  private static final byte TAG_BYTE = (byte) 0xFB;
+    /**
+     * Serialization tag used to catch incorrect payloads.
+     */
+    private static final byte TAG_BYTE = (byte) 0xFB;
 
-  public final byte[] response;
-  public final byte[] nonce;
-  public final byte[] inputIv;
-  public final byte[] outputIv;
+    public final byte[] response;
+    public final byte[] nonce;
+    public final byte[] inputIv;
+    public final byte[] outputIv;
 
-  public ServerResponse(
-      byte[] response,
-      byte[] nonce,
-      byte[] inputIv,
-      byte[] outputIv) {
-    this.response = response;
-    this.nonce = nonce;
-    this.inputIv = inputIv;
-    this.outputIv = outputIv;
-  }
-
-  @Override
-  public int encodedLength() {
-    return 1 +
-      Encoders.ByteArrays.encodedLength(response) +
-      Encoders.ByteArrays.encodedLength(nonce) +
-      Encoders.ByteArrays.encodedLength(inputIv) +
-      Encoders.ByteArrays.encodedLength(outputIv);
-  }
-
-  @Override
-  public void encode(ByteBuf buf) {
-    buf.writeByte(TAG_BYTE);
-    Encoders.ByteArrays.encode(buf, response);
-    Encoders.ByteArrays.encode(buf, nonce);
-    Encoders.ByteArrays.encode(buf, inputIv);
-    Encoders.ByteArrays.encode(buf, outputIv);
-  }
-
-  public static ServerResponse decodeMessage(ByteBuffer buffer) {
-    ByteBuf buf = Unpooled.wrappedBuffer(buffer);
-
-    if (buf.readByte() != TAG_BYTE) {
-      throw new IllegalArgumentException("Expected ServerResponse, received something else.");
+    public ServerResponse(
+            byte[] response,
+            byte[] nonce,
+            byte[] inputIv,
+            byte[] outputIv) {
+        this.response = response;
+        this.nonce = nonce;
+        this.inputIv = inputIv;
+        this.outputIv = outputIv;
     }
 
-    return new ServerResponse(
-      Encoders.ByteArrays.decode(buf),
-      Encoders.ByteArrays.decode(buf),
-      Encoders.ByteArrays.decode(buf),
-      Encoders.ByteArrays.decode(buf));
-  }
+    public static ServerResponse decodeMessage(ByteBuffer buffer) {
+        ByteBuf buf = Unpooled.wrappedBuffer(buffer);
+
+        if (buf.readByte() != TAG_BYTE) {
+            throw new IllegalArgumentException("Expected ServerResponse, received something else.");
+        }
+
+        return new ServerResponse(
+                Encoders.ByteArrays.decode(buf),
+                Encoders.ByteArrays.decode(buf),
+                Encoders.ByteArrays.decode(buf),
+                Encoders.ByteArrays.decode(buf));
+    }
+
+    @Override
+    public int encodedLength() {
+        return 1 +
+                Encoders.ByteArrays.encodedLength(response) +
+                Encoders.ByteArrays.encodedLength(nonce) +
+                Encoders.ByteArrays.encodedLength(inputIv) +
+                Encoders.ByteArrays.encodedLength(outputIv);
+    }
+
+    @Override
+    public void encode(ByteBuf buf) {
+        buf.writeByte(TAG_BYTE);
+        Encoders.ByteArrays.encode(buf, response);
+        Encoders.ByteArrays.encode(buf, nonce);
+        Encoders.ByteArrays.encode(buf, inputIv);
+        Encoders.ByteArrays.encode(buf, outputIv);
+    }
 
 }

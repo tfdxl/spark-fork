@@ -17,11 +17,11 @@
 
 package org.apache.spark.util.kvstore;
 
+import org.apache.spark.annotation.Private;
+
 import java.io.Closeable;
 import java.util.Iterator;
 import java.util.List;
-
-import org.apache.spark.annotation.Private;
 
 /**
  * An iterator for KVStore.
@@ -34,18 +34,18 @@ import org.apache.spark.annotation.Private;
 @Private
 public interface KVStoreIterator<T> extends Iterator<T>, Closeable {
 
-  /**
-   * Retrieve multiple elements from the store.
-   *
-   * @param max Maximum number of elements to retrieve.
-   */
-  List<T> next(int max);
+    /**
+     * Retrieve multiple elements from the store.
+     *
+     * @param max Maximum number of elements to retrieve.
+     */
+    List<T> next(int max);
 
-  /**
-   * Skip in the iterator.
-   *
-   * @return Whether there are items left after skipping.
-   */
-  boolean skip(long n);
+    /**
+     * Skip in the iterator.
+     *
+     * @return Whether there are items left after skipping.
+     */
+    boolean skip(long n);
 
 }

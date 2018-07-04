@@ -19,10 +19,10 @@ package org.apache.spark.util.sketch
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
-import scala.reflect.ClassTag
-import scala.util.Random
+import org.scalatest.FunSuite
 
-import org.scalatest.FunSuite // scalastyle:ignore funsuite
+import scala.reflect.ClassTag
+import scala.util.Random // scalastyle:ignore funsuite
 
 class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
   private val epsOfTotalCount = 0.01
@@ -31,16 +31,9 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
   private val seed = 42
 
-  // Serializes and deserializes a given `CountMinSketch`, then checks whether the deserialized
-  // version is equivalent to the original one.
-  private def checkSerDe(sketch: CountMinSketch): Unit = {
-    val out = new ByteArrayOutputStream()
-    sketch.writeTo(out)
-
-    val in = new ByteArrayInputStream(out.toByteArray)
-    val deserialized = CountMinSketch.readFrom(in)
-
-    assert(sketch === deserialized)
+  def testItemType[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
+    testAccuracy[T](typeName)(itemGenerator)
+    testMergeInPlace[T](typeName)(itemGenerator)
   }
 
   def testAccuracy[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
@@ -89,7 +82,9 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
 
       val numToMerge = 5
       val numItemsPerSketch = 100000
-      val perSketchItems = Array.fill(numToMerge, numItemsPerSketch) { itemGenerator(r) }
+      val perSketchItems = Array.fill(numToMerge, numItemsPerSketch) {
+        itemGenerator(r)
+      }
 
       val sketches = perSketchItems.map { items =>
         val sketch = CountMinSketch.create(epsOfTotalCount, confidence, seed)
@@ -115,18 +110,33 @@ class CountMinSketchSuite extends FunSuite { // scalastyle:ignore funsuite
     }
   }
 
-  def testItemType[T: ClassTag](typeName: String)(itemGenerator: Random => T): Unit = {
-    testAccuracy[T](typeName)(itemGenerator)
-    testMergeInPlace[T](typeName)(itemGenerator)
+  // Serializes and deserializes a given `CountMinSketch`, then checks whether the deserialized
+  // version is equivalent to the original one.
+  private def checkSerDe(sketch: CountMinSketch): Unit = {
+    val out = new ByteArrayOutputStream()
+    sketch.writeTo(out)
+
+    val in = new ByteArrayInputStream(out.toByteArray)
+    val deserialized = CountMinSketch.readFrom(in)
+
+    assert(sketch === deserialized)
   }
 
-  testItemType[Byte]("Byte") { _.nextInt().toByte }
+  testItemType[Byte]("Byte") {
+    _.nextInt().toByte
+  }
 
-  testItemType[Short]("Short") { _.nextInt().toShort }
+  testItemType[Short]("Short") {
+    _.nextInt().toShort
+  }
 
-  testItemType[Int]("Int") { _.nextInt() }
+  testItemType[Int]("Int") {
+    _.nextInt()
+  }
 
-  testItemType[Long]("Long") { _.nextLong() }
+  testItemType[Long]("Long") {
+    _.nextLong()
+  }
 
   testItemType[String]("String") { r => r.nextString(r.nextInt(20)) }
 

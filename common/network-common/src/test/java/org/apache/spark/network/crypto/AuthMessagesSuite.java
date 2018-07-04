@@ -17,64 +17,66 @@
 
 package org.apache.spark.network.crypto;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.spark.network.protocol.Encodable;
+import org.junit.Test;
+
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import org.junit.Test;
-import static org.junit.Assert.*;
-
-import org.apache.spark.network.protocol.Encodable;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class AuthMessagesSuite {
 
-  private static int COUNTER = 0;
+    private static int COUNTER = 0;
 
-  private static String string() {
-    return String.valueOf(COUNTER++);
-  }
+    private static String string() {
+        return String.valueOf(COUNTER++);
+    }
 
-  private static byte[] byteArray() {
-    byte[] bytes = new byte[COUNTER++];
-    for (int i = 0; i < bytes.length; i++) {
-      bytes[i] = (byte) COUNTER;
-    } return bytes;
-  }
+    private static byte[] byteArray() {
+        byte[] bytes = new byte[COUNTER++];
+        for (int i = 0; i < bytes.length; i++) {
+            bytes[i] = (byte) COUNTER;
+        }
+        return bytes;
+    }
 
-  private static int integer() {
-    return COUNTER++;
-  }
+    private static int integer() {
+        return COUNTER++;
+    }
 
-  @Test
-  public void testClientChallenge() {
-    ClientChallenge msg = new ClientChallenge(string(), string(), integer(), string(), integer(),
-      byteArray(), byteArray());
-    ClientChallenge decoded = ClientChallenge.decodeMessage(encode(msg));
+    @Test
+    public void testClientChallenge() {
+        ClientChallenge msg = new ClientChallenge(string(), string(), integer(), string(), integer(),
+                byteArray(), byteArray());
+        ClientChallenge decoded = ClientChallenge.decodeMessage(encode(msg));
 
-    assertEquals(msg.appId, decoded.appId);
-    assertEquals(msg.kdf, decoded.kdf);
-    assertEquals(msg.iterations, decoded.iterations);
-    assertEquals(msg.cipher, decoded.cipher);
-    assertEquals(msg.keyLength, decoded.keyLength);
-    assertTrue(Arrays.equals(msg.nonce, decoded.nonce));
-    assertTrue(Arrays.equals(msg.challenge, decoded.challenge));
-  }
+        assertEquals(msg.appId, decoded.appId);
+        assertEquals(msg.kdf, decoded.kdf);
+        assertEquals(msg.iterations, decoded.iterations);
+        assertEquals(msg.cipher, decoded.cipher);
+        assertEquals(msg.keyLength, decoded.keyLength);
+        assertTrue(Arrays.equals(msg.nonce, decoded.nonce));
+        assertTrue(Arrays.equals(msg.challenge, decoded.challenge));
+    }
 
-  @Test
-  public void testServerResponse() {
-    ServerResponse msg = new ServerResponse(byteArray(), byteArray(), byteArray(), byteArray());
-    ServerResponse decoded = ServerResponse.decodeMessage(encode(msg));
-    assertTrue(Arrays.equals(msg.response, decoded.response));
-    assertTrue(Arrays.equals(msg.nonce, decoded.nonce));
-    assertTrue(Arrays.equals(msg.inputIv, decoded.inputIv));
-    assertTrue(Arrays.equals(msg.outputIv, decoded.outputIv));
-  }
+    @Test
+    public void testServerResponse() {
+        ServerResponse msg = new ServerResponse(byteArray(), byteArray(), byteArray(), byteArray());
+        ServerResponse decoded = ServerResponse.decodeMessage(encode(msg));
+        assertTrue(Arrays.equals(msg.response, decoded.response));
+        assertTrue(Arrays.equals(msg.nonce, decoded.nonce));
+        assertTrue(Arrays.equals(msg.inputIv, decoded.inputIv));
+        assertTrue(Arrays.equals(msg.outputIv, decoded.outputIv));
+    }
 
-  private ByteBuffer encode(Encodable msg) {
-    ByteBuf buf = Unpooled.buffer();
-    msg.encode(buf);
-    return buf.nioBuffer();
-  }
+    private ByteBuffer encode(Encodable msg) {
+        ByteBuf buf = Unpooled.buffer();
+        msg.encode(buf);
+        return buf.nioBuffer();
+    }
 
 }

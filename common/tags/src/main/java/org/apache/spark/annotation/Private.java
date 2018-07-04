@@ -25,11 +25,11 @@ import java.lang.annotation.Target;
 /**
  * A class that is considered private to the internals of Spark -- there is a high-likelihood
  * they will be changed in future versions of Spark.
- *
+ * <p>
  * This should be used only when the standard Scala / Java means of protecting classes are
  * insufficient.  In particular, Java has no equivalent of private[spark], so we use this annotation
  * in its place.
- *
+ * <p>
  * NOTE: If there exists a Scaladoc comment that immediately precedes this annotation, the first
  * line of the comment must be ":: Private ::" with no trailing blank line. This is because
  * of the known issue that Scaladoc displays only either the annotation or the comment, whichever
@@ -38,4 +38,5 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER,
         ElementType.CONSTRUCTOR, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE})
-public @interface Private {}
+public @interface Private {
+}

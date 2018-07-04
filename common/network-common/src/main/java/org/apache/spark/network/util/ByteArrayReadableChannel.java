@@ -17,46 +17,46 @@
 
 package org.apache.spark.network.util;
 
+import io.netty.buffer.ByteBuf;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 
-import io.netty.buffer.ByteBuf;
-
 public class ByteArrayReadableChannel implements ReadableByteChannel {
-  private ByteBuf data;
+    private ByteBuf data;
 
-  public int readableBytes() {
-    return data.readableBytes();
-  }
-
-  public void feedData(ByteBuf buf) {
-    data = buf;
-  }
-
-  @Override
-  public int read(ByteBuffer dst) throws IOException {
-    int totalRead = 0;
-    while (data.readableBytes() > 0 && dst.remaining() > 0) {
-      int bytesToRead = Math.min(data.readableBytes(), dst.remaining());
-      dst.put(data.readSlice(bytesToRead).nioBuffer());
-      totalRead += bytesToRead;
+    public int readableBytes() {
+        return data.readableBytes();
     }
 
-    if (data.readableBytes() == 0) {
-      data.release();
+    public void feedData(ByteBuf buf) {
+        data = buf;
     }
 
-    return totalRead;
-  }
+    @Override
+    public int read(ByteBuffer dst) throws IOException {
+        int totalRead = 0;
+        while (data.readableBytes() > 0 && dst.remaining() > 0) {
+            int bytesToRead = Math.min(data.readableBytes(), dst.remaining());
+            dst.put(data.readSlice(bytesToRead).nioBuffer());
+            totalRead += bytesToRead;
+        }
 
-  @Override
-  public void close() throws IOException {
-  }
+        if (data.readableBytes() == 0) {
+            data.release();
+        }
 
-  @Override
-  public boolean isOpen() {
-    return true;
-  }
+        return totalRead;
+    }
+
+    @Override
+    public void close() throws IOException {
+    }
+
+    @Override
+    public boolean isOpen() {
+        return true;
+    }
 
 }

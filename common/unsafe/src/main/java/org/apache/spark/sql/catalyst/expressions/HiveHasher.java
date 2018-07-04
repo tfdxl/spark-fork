@@ -26,34 +26,34 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public class HiveHasher {
 
-  @Override
-  public String toString() {
-    return HiveHasher.class.getSimpleName();
-  }
-
-  public static int hashInt(int input) {
-    return input;
-  }
-
-  public static int hashLong(long input) {
-    return (int) ((input >>> 32) ^ input);
-  }
-
-  public static int hashUnsafeBytesBlock(MemoryBlock mb) {
-    long lengthInBytes = mb.size();
-    assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
-    int result = 0;
-    for (long i = 0; i < lengthInBytes; i++) {
-      result = (result * 31) + (int) mb.getByte(i);
+    public static int hashInt(int input) {
+        return input;
     }
-    return result;
-  }
 
-  public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes) {
-    return hashUnsafeBytesBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes));
-  }
+    public static int hashLong(long input) {
+        return (int) ((input >>> 32) ^ input);
+    }
 
-  public static int hashUTF8String(UTF8String str) {
-    return hashUnsafeBytesBlock(str.getMemoryBlock());
-  }
+    public static int hashUnsafeBytesBlock(MemoryBlock mb) {
+        long lengthInBytes = mb.size();
+        assert (lengthInBytes >= 0) : "lengthInBytes cannot be negative";
+        int result = 0;
+        for (long i = 0; i < lengthInBytes; i++) {
+            result = (result * 31) + (int) mb.getByte(i);
+        }
+        return result;
+    }
+
+    public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes) {
+        return hashUnsafeBytesBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes));
+    }
+
+    public static int hashUTF8String(UTF8String str) {
+        return hashUnsafeBytesBlock(str.getMemoryBlock());
+    }
+
+    @Override
+    public String toString() {
+        return HiveHasher.class.getSimpleName();
+    }
 }

@@ -17,9 +17,9 @@
 
 package org.apache.spark.util.kvstore;
 
-import java.io.IOException;
-
 import org.apache.spark.annotation.Private;
+
+import java.io.IOException;
 
 /**
  * Exception thrown when the store implementation is not compatible with the underlying data.

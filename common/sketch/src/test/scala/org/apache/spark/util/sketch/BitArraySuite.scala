@@ -17,9 +17,9 @@
 
 package org.apache.spark.util.sketch
 
-import scala.util.Random
+import org.scalatest.FunSuite
 
-import org.scalatest.FunSuite // scalastyle:ignore funsuite
+import scala.util.Random // scalastyle:ignore funsuite
 
 class BitArraySuite extends FunSuite { // scalastyle:ignore funsuite
 

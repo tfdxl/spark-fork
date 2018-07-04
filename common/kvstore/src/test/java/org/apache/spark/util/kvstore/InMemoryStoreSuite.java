@@ -17,145 +17,146 @@
 
 package org.apache.spark.util.kvstore;
 
+import org.junit.Test;
+
 import java.util.NoSuchElementException;
 
-import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class InMemoryStoreSuite {
 
-  @Test
-  public void testObjectWriteReadDelete() throws Exception {
-    KVStore store = new InMemoryStore();
+    @Test
+    public void testObjectWriteReadDelete() throws Exception {
+        KVStore store = new InMemoryStore();
 
-    CustomType1 t = new CustomType1();
-    t.key = "key";
-    t.id = "id";
-    t.name = "name";
+        CustomType1 t = new CustomType1();
+        t.key = "key";
+        t.id = "id";
+        t.name = "name";
 
-    try {
-      store.read(CustomType1.class, t.key);
-      fail("Expected exception for non-existant object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
+        try {
+            store.read(CustomType1.class, t.key);
+            fail("Expected exception for non-existant object.");
+        } catch (NoSuchElementException nsee) {
+            // Expected.
+        }
+
+        store.write(t);
+        assertEquals(t, store.read(t.getClass(), t.key));
+        assertEquals(1L, store.count(t.getClass()));
+
+        store.delete(t.getClass(), t.key);
+        try {
+            store.read(t.getClass(), t.key);
+            fail("Expected exception for deleted object.");
+        } catch (NoSuchElementException nsee) {
+            // Expected.
+        }
     }
 
-    store.write(t);
-    assertEquals(t, store.read(t.getClass(), t.key));
-    assertEquals(1L, store.count(t.getClass()));
+    @Test
+    public void testMultipleObjectWriteReadDelete() throws Exception {
+        KVStore store = new InMemoryStore();
 
-    store.delete(t.getClass(), t.key);
-    try {
-      store.read(t.getClass(), t.key);
-      fail("Expected exception for deleted object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
+        CustomType1 t1 = new CustomType1();
+        t1.key = "key1";
+        t1.id = "id";
+        t1.name = "name1";
+
+        CustomType1 t2 = new CustomType1();
+        t2.key = "key2";
+        t2.id = "id";
+        t2.name = "name2";
+
+        store.write(t1);
+        store.write(t2);
+
+        assertEquals(t1, store.read(t1.getClass(), t1.key));
+        assertEquals(t2, store.read(t2.getClass(), t2.key));
+        assertEquals(2L, store.count(t1.getClass()));
+
+        store.delete(t1.getClass(), t1.key);
+        assertEquals(t2, store.read(t2.getClass(), t2.key));
+        store.delete(t2.getClass(), t2.key);
+        try {
+            store.read(t2.getClass(), t2.key);
+            fail("Expected exception for deleted object.");
+        } catch (NoSuchElementException nsee) {
+            // Expected.
+        }
     }
-  }
 
-  @Test
-  public void testMultipleObjectWriteReadDelete() throws Exception {
-    KVStore store = new InMemoryStore();
+    @Test
+    public void testMetadata() throws Exception {
+        KVStore store = new InMemoryStore();
+        assertNull(store.getMetadata(CustomType1.class));
 
-    CustomType1 t1 = new CustomType1();
-    t1.key = "key1";
-    t1.id = "id";
-    t1.name = "name1";
+        CustomType1 t = new CustomType1();
+        t.id = "id";
+        t.name = "name";
 
-    CustomType1 t2 = new CustomType1();
-    t2.key = "key2";
-    t2.id = "id";
-    t2.name = "name2";
+        store.setMetadata(t);
+        assertEquals(t, store.getMetadata(CustomType1.class));
 
-    store.write(t1);
-    store.write(t2);
-
-    assertEquals(t1, store.read(t1.getClass(), t1.key));
-    assertEquals(t2, store.read(t2.getClass(), t2.key));
-    assertEquals(2L, store.count(t1.getClass()));
-
-    store.delete(t1.getClass(), t1.key);
-    assertEquals(t2, store.read(t2.getClass(), t2.key));
-    store.delete(t2.getClass(), t2.key);
-    try {
-      store.read(t2.getClass(), t2.key);
-      fail("Expected exception for deleted object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
+        store.setMetadata(null);
+        assertNull(store.getMetadata(CustomType1.class));
     }
-  }
 
-  @Test
-  public void testMetadata() throws Exception {
-    KVStore store = new InMemoryStore();
-    assertNull(store.getMetadata(CustomType1.class));
+    @Test
+    public void testUpdate() throws Exception {
+        KVStore store = new InMemoryStore();
 
-    CustomType1 t = new CustomType1();
-    t.id = "id";
-    t.name = "name";
+        CustomType1 t = new CustomType1();
+        t.key = "key";
+        t.id = "id";
+        t.name = "name";
 
-    store.setMetadata(t);
-    assertEquals(t, store.getMetadata(CustomType1.class));
+        store.write(t);
 
-    store.setMetadata(null);
-    assertNull(store.getMetadata(CustomType1.class));
-  }
+        t.name = "anotherName";
 
-  @Test
-  public void testUpdate() throws Exception {
-    KVStore store = new InMemoryStore();
+        store.write(t);
+        assertEquals(1, store.count(t.getClass()));
+        assertSame(t, store.read(t.getClass(), t.key));
+    }
 
-    CustomType1 t = new CustomType1();
-    t.key = "key";
-    t.id = "id";
-    t.name = "name";
+    @Test
+    public void testArrayIndices() throws Exception {
+        KVStore store = new InMemoryStore();
 
-    store.write(t);
+        ArrayKeyIndexType o = new ArrayKeyIndexType();
+        o.key = new int[]{1, 2};
+        o.id = new String[]{"3", "4"};
 
-    t.name = "anotherName";
+        store.write(o);
+        assertEquals(o, store.read(ArrayKeyIndexType.class, o.key));
+        assertEquals(o, store.view(ArrayKeyIndexType.class).index("id").first(o.id).iterator().next());
+    }
 
-    store.write(t);
-    assertEquals(1, store.count(t.getClass()));
-    assertSame(t, store.read(t.getClass(), t.key));
-  }
+    @Test
+    public void testBasicIteration() throws Exception {
+        KVStore store = new InMemoryStore();
 
-  @Test
-  public void testArrayIndices() throws Exception {
-    KVStore store = new InMemoryStore();
+        CustomType1 t1 = new CustomType1();
+        t1.key = "1";
+        t1.id = "id1";
+        t1.name = "name1";
+        store.write(t1);
 
-    ArrayKeyIndexType o = new ArrayKeyIndexType();
-    o.key = new int[] { 1, 2 };
-    o.id = new String[] { "3", "4" };
+        CustomType1 t2 = new CustomType1();
+        t2.key = "2";
+        t2.id = "id2";
+        t2.name = "name2";
+        store.write(t2);
 
-    store.write(o);
-    assertEquals(o, store.read(ArrayKeyIndexType.class, o.key));
-    assertEquals(o, store.view(ArrayKeyIndexType.class).index("id").first(o.id).iterator().next());
-  }
-
-  @Test
-  public void testBasicIteration() throws Exception {
-    KVStore store = new InMemoryStore();
-
-    CustomType1 t1 = new CustomType1();
-    t1.key = "1";
-    t1.id = "id1";
-    t1.name = "name1";
-    store.write(t1);
-
-    CustomType1 t2 = new CustomType1();
-    t2.key = "2";
-    t2.id = "id2";
-    t2.name = "name2";
-    store.write(t2);
-
-    assertEquals(t1.id, store.view(t1.getClass()).iterator().next().id);
-    assertEquals(t2.id, store.view(t1.getClass()).skip(1).iterator().next().id);
-    assertEquals(t2.id, store.view(t1.getClass()).skip(1).max(1).iterator().next().id);
-    assertEquals(t1.id,
-      store.view(t1.getClass()).first(t1.key).max(1).iterator().next().id);
-    assertEquals(t2.id,
-      store.view(t1.getClass()).first(t2.key).max(1).iterator().next().id);
-    assertFalse(store.view(t1.getClass()).first(t2.id).skip(1).iterator().hasNext());
-  }
+        assertEquals(t1.id, store.view(t1.getClass()).iterator().next().id);
+        assertEquals(t2.id, store.view(t1.getClass()).skip(1).iterator().next().id);
+        assertEquals(t2.id, store.view(t1.getClass()).skip(1).max(1).iterator().next().id);
+        assertEquals(t1.id,
+                store.view(t1.getClass()).first(t1.key).max(1).iterator().next().id);
+        assertEquals(t2.id,
+                store.view(t1.getClass()).first(t2.key).max(1).iterator().next().id);
+        assertFalse(store.view(t1.getClass()).first(t2.id).skip(1).iterator().hasNext());
+    }
 
 }

@@ -18,7 +18,6 @@
 package org.apache.spark.network.crypto;
 
 import io.netty.channel.Channel;
-
 import org.apache.spark.network.sasl.SaslServerBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.RpcHandler;
@@ -29,27 +28,27 @@ import org.apache.spark.network.util.TransportConf;
  * A bootstrap which is executed on a TransportServer's client channel once a client connects
  * to the server, enabling authentication using Spark's auth protocol (and optionally SASL for
  * clients that don't support the new protocol).
- *
+ * <p>
  * It also automatically falls back to SASL if the new encryption backend is disabled, so that
  * callers only need to install this bootstrap when authentication is enabled.
  */
 public class AuthServerBootstrap implements TransportServerBootstrap {
 
-  private final TransportConf conf;
-  private final SecretKeyHolder secretKeyHolder;
+    private final TransportConf conf;
+    private final SecretKeyHolder secretKeyHolder;
 
-  public AuthServerBootstrap(TransportConf conf, SecretKeyHolder secretKeyHolder) {
-    this.conf = conf;
-    this.secretKeyHolder = secretKeyHolder;
-  }
-
-  public RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler) {
-    if (!conf.encryptionEnabled()) {
-      TransportServerBootstrap sasl = new SaslServerBootstrap(conf, secretKeyHolder);
-      return sasl.doBootstrap(channel, rpcHandler);
+    public AuthServerBootstrap(TransportConf conf, SecretKeyHolder secretKeyHolder) {
+        this.conf = conf;
+        this.secretKeyHolder = secretKeyHolder;
     }
 
-    return new AuthRpcHandler(conf, channel, rpcHandler, secretKeyHolder);
-  }
+    public RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler) {
+        if (!conf.encryptionEnabled()) {
+            TransportServerBootstrap sasl = new SaslServerBootstrap(conf, secretKeyHolder);
+            return sasl.doBootstrap(channel, rpcHandler);
+        }
+
+        return new AuthRpcHandler(conf, channel, rpcHandler, secretKeyHolder);
+    }
 
 }

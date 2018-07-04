@@ -19,7 +19,6 @@ package org.apache.spark.network.protocol;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
-
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
 
@@ -29,58 +28,62 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
  * {@link org.apache.spark.network.protocol.ResponseMessage} (either success or failure).
  */
 public final class RpcRequest extends AbstractMessage implements RequestMessage {
-  /** Used to link an RPC request with its response. */
-  public final long requestId;
+    /**
+     * Used to link an RPC request with its response.
+     */
+    public final long requestId;
 
-  public RpcRequest(long requestId, ManagedBuffer message) {
-    super(message, true);
-    this.requestId = requestId;
-  }
-
-  @Override
-  public Type type() { return Type.RpcRequest; }
-
-  @Override
-  public int encodedLength() {
-    // The integer (a.k.a. the body size) is not really used, since that information is already
-    // encoded in the frame length. But this maintains backwards compatibility with versions of
-    // RpcRequest that use Encoders.ByteArrays.
-    return 8 + 4;
-  }
-
-  @Override
-  public void encode(ByteBuf buf) {
-    buf.writeLong(requestId);
-    // See comment in encodedLength().
-    buf.writeInt((int) body().size());
-  }
-
-  public static RpcRequest decode(ByteBuf buf) {
-    long requestId = buf.readLong();
-    // See comment in encodedLength().
-    buf.readInt();
-    return new RpcRequest(requestId, new NettyManagedBuffer(buf.retain()));
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hashCode(requestId, body());
-  }
-
-  @Override
-  public boolean equals(Object other) {
-    if (other instanceof RpcRequest) {
-      RpcRequest o = (RpcRequest) other;
-      return requestId == o.requestId && super.equals(o);
+    public RpcRequest(long requestId, ManagedBuffer message) {
+        super(message, true);
+        this.requestId = requestId;
     }
-    return false;
-  }
 
-  @Override
-  public String toString() {
-    return Objects.toStringHelper(this)
-      .add("requestId", requestId)
-      .add("body", body())
-      .toString();
-  }
+    public static RpcRequest decode(ByteBuf buf) {
+        long requestId = buf.readLong();
+        // See comment in encodedLength().
+        buf.readInt();
+        return new RpcRequest(requestId, new NettyManagedBuffer(buf.retain()));
+    }
+
+    @Override
+    public Type type() {
+        return Type.RpcRequest;
+    }
+
+    @Override
+    public int encodedLength() {
+        // The integer (a.k.a. the body size) is not really used, since that information is already
+        // encoded in the frame length. But this maintains backwards compatibility with versions of
+        // RpcRequest that use Encoders.ByteArrays.
+        return 8 + 4;
+    }
+
+    @Override
+    public void encode(ByteBuf buf) {
+        buf.writeLong(requestId);
+        // See comment in encodedLength().
+        buf.writeInt((int) body().size());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(requestId, body());
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (other instanceof RpcRequest) {
+            RpcRequest o = (RpcRequest) other;
+            return requestId == o.requestId && super.equals(o);
+        }
+        return false;
+    }
+
+    @Override
+    public String toString() {
+        return Objects.toStringHelper(this)
+                .add("requestId", requestId)
+                .add("body", body())
+                .toString();
+    }
 }

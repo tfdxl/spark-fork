@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.memory;
 
 import com.google.common.primitives.Ints;
-
 import org.apache.spark.unsafe.Platform;
 
 /**
@@ -26,103 +25,105 @@ import org.apache.spark.unsafe.Platform;
  */
 public final class ByteArrayMemoryBlock extends MemoryBlock {
 
-  private final byte[] array;
+    private final byte[] array;
 
-  public ByteArrayMemoryBlock(byte[] obj, long offset, long size) {
-    super(obj, offset, size);
-    this.array = obj;
-    assert(offset + size <= Platform.BYTE_ARRAY_OFFSET + obj.length) :
-      "The sum of size " + size + " and offset " + offset + " should not be larger than " +
-        "the size of the given memory space " + (obj.length + Platform.BYTE_ARRAY_OFFSET);
-  }
+    public ByteArrayMemoryBlock(byte[] obj, long offset, long size) {
+        super(obj, offset, size);
+        this.array = obj;
+        assert (offset + size <= Platform.BYTE_ARRAY_OFFSET + obj.length) :
+                "The sum of size " + size + " and offset " + offset + " should not be larger than " +
+                        "the size of the given memory space " + (obj.length + Platform.BYTE_ARRAY_OFFSET);
+    }
 
-  public ByteArrayMemoryBlock(long length) {
-    this(new byte[Ints.checkedCast(length)], Platform.BYTE_ARRAY_OFFSET, length);
-  }
+    public ByteArrayMemoryBlock(long length) {
+        this(new byte[Ints.checkedCast(length)], Platform.BYTE_ARRAY_OFFSET, length);
+    }
 
-  @Override
-  public MemoryBlock subBlock(long offset, long size) {
-    checkSubBlockRange(offset, size);
-    if (offset == 0 && size == this.size()) return this;
-    return new ByteArrayMemoryBlock(array, this.offset + offset, size);
-  }
+    /**
+     * Creates a memory block pointing to the memory used by the byte array.
+     */
+    public static ByteArrayMemoryBlock fromArray(final byte[] array) {
+        return new ByteArrayMemoryBlock(array, Platform.BYTE_ARRAY_OFFSET, array.length);
+    }
 
-  public byte[] getByteArray() { return array; }
+    @Override
+    public MemoryBlock subBlock(long offset, long size) {
+        checkSubBlockRange(offset, size);
+        if (offset == 0 && size == this.size()) return this;
+        return new ByteArrayMemoryBlock(array, this.offset + offset, size);
+    }
 
-  /**
-   * Creates a memory block pointing to the memory used by the byte array.
-   */
-  public static ByteArrayMemoryBlock fromArray(final byte[] array) {
-    return new ByteArrayMemoryBlock(array, Platform.BYTE_ARRAY_OFFSET, array.length);
-  }
+    public byte[] getByteArray() {
+        return array;
+    }
 
-  @Override
-  public int getInt(long offset) {
-    return Platform.getInt(array, this.offset + offset);
-  }
+    @Override
+    public int getInt(long offset) {
+        return Platform.getInt(array, this.offset + offset);
+    }
 
-  @Override
-  public void putInt(long offset, int value) {
-    Platform.putInt(array, this.offset + offset, value);
-  }
+    @Override
+    public void putInt(long offset, int value) {
+        Platform.putInt(array, this.offset + offset, value);
+    }
 
-  @Override
-  public boolean getBoolean(long offset) {
-    return Platform.getBoolean(array, this.offset + offset);
-  }
+    @Override
+    public boolean getBoolean(long offset) {
+        return Platform.getBoolean(array, this.offset + offset);
+    }
 
-  @Override
-  public void putBoolean(long offset, boolean value) {
-    Platform.putBoolean(array, this.offset + offset, value);
-  }
+    @Override
+    public void putBoolean(long offset, boolean value) {
+        Platform.putBoolean(array, this.offset + offset, value);
+    }
 
-  @Override
-  public byte getByte(long offset) {
-    return array[(int)(this.offset + offset - Platform.BYTE_ARRAY_OFFSET)];
-  }
+    @Override
+    public byte getByte(long offset) {
+        return array[(int) (this.offset + offset - Platform.BYTE_ARRAY_OFFSET)];
+    }
 
-  @Override
-  public void putByte(long offset, byte value) {
-    array[(int)(this.offset + offset - Platform.BYTE_ARRAY_OFFSET)] = value;
-  }
+    @Override
+    public void putByte(long offset, byte value) {
+        array[(int) (this.offset + offset - Platform.BYTE_ARRAY_OFFSET)] = value;
+    }
 
-  @Override
-  public short getShort(long offset) {
-    return Platform.getShort(array, this.offset + offset);
-  }
+    @Override
+    public short getShort(long offset) {
+        return Platform.getShort(array, this.offset + offset);
+    }
 
-  @Override
-  public void putShort(long offset, short value) {
-    Platform.putShort(array, this.offset + offset, value);
-  }
+    @Override
+    public void putShort(long offset, short value) {
+        Platform.putShort(array, this.offset + offset, value);
+    }
 
-  @Override
-  public long getLong(long offset) {
-    return Platform.getLong(array, this.offset + offset);
-  }
+    @Override
+    public long getLong(long offset) {
+        return Platform.getLong(array, this.offset + offset);
+    }
 
-  @Override
-  public void putLong(long offset, long value) {
-    Platform.putLong(array, this.offset + offset, value);
-  }
+    @Override
+    public void putLong(long offset, long value) {
+        Platform.putLong(array, this.offset + offset, value);
+    }
 
-  @Override
-  public float getFloat(long offset) {
-    return Platform.getFloat(array, this.offset + offset);
-  }
+    @Override
+    public float getFloat(long offset) {
+        return Platform.getFloat(array, this.offset + offset);
+    }
 
-  @Override
-  public void putFloat(long offset, float value) {
-    Platform.putFloat(array, this.offset + offset, value);
-  }
+    @Override
+    public void putFloat(long offset, float value) {
+        Platform.putFloat(array, this.offset + offset, value);
+    }
 
-  @Override
-  public double getDouble(long offset) {
-    return Platform.getDouble(array, this.offset + offset);
-  }
+    @Override
+    public double getDouble(long offset) {
+        return Platform.getDouble(array, this.offset + offset);
+    }
 
-  @Override
-  public void putDouble(long offset, double value) {
-    Platform.putDouble(array, this.offset + offset, value);
-  }
+    @Override
+    public void putDouble(long offset, double value) {
+        Platform.putDouble(array, this.offset + offset, value);
+    }
 }

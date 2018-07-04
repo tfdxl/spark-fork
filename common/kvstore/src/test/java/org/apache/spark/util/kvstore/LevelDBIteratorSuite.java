@@ -17,32 +17,32 @@
 
 package org.apache.spark.util.kvstore;
 
-import java.io.File;
-
 import org.apache.commons.io.FileUtils;
 import org.junit.AfterClass;
 
+import java.io.File;
+
 public class LevelDBIteratorSuite extends DBIteratorSuite {
 
-  private static File dbpath;
-  private static LevelDB db;
+    private static File dbpath;
+    private static LevelDB db;
 
-  @AfterClass
-  public static void cleanup() throws Exception {
-    if (db != null) {
-      db.close();
+    @AfterClass
+    public static void cleanup() throws Exception {
+        if (db != null) {
+            db.close();
+        }
+        if (dbpath != null) {
+            FileUtils.deleteQuietly(dbpath);
+        }
     }
-    if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
-    }
-  }
 
-  @Override
-  protected KVStore createStore() throws Exception {
-    dbpath = File.createTempFile("test.", ".ldb");
-    dbpath.delete();
-    db = new LevelDB(dbpath);
-    return db;
-  }
+    @Override
+    protected KVStore createStore() throws Exception {
+        dbpath = File.createTempFile("test.", ".ldb");
+        dbpath.delete();
+        db = new LevelDB(dbpath);
+        return db;
+    }
 
 }

@@ -19,9 +19,9 @@ package org.apache.spark.util.kvstore;
 
 public class InMemoryIteratorSuite extends DBIteratorSuite {
 
-  @Override
-  protected KVStore createStore() {
-    return new InMemoryStore();
-  }
+    @Override
+    protected KVStore createStore() {
+        return new InMemoryStore();
+    }
 
 }
