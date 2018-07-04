@@ -134,6 +134,7 @@ class ExecutionListenerManager private extends Logging {
     }
   }
 
+  //查询执行监听器
   private[this] val listeners = ListBuffer.empty[QueryExecutionListener]
 
   /** A lock to prevent updating the list of listeners while we are traversing through them. */
