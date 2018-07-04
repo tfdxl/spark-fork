@@ -19,22 +19,22 @@ package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
 
-import scala.reflect.ClassTag
-
 import org.apache.spark._
 import org.apache.spark.util.Utils
 
+import scala.reflect.ClassTag
+
 private[spark]
 class CartesianPartition(
-    idx: Int,
-    @transient private val rdd1: RDD[_],
-    @transient private val rdd2: RDD[_],
-    s1Index: Int,
-    s2Index: Int
-  ) extends Partition {
+                          idx: Int,
+                          @transient private val rdd1: RDD[_],
+                          @transient private val rdd2: RDD[_],
+                          s1Index: Int,
+                          s2Index: Int
+                        ) extends Partition {
+  override val index: Int = idx
   var s1 = rdd1.partitions(s1Index)
   var s2 = rdd2.partitions(s2Index)
-  override val index: Int = idx
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
@@ -47,11 +47,11 @@ class CartesianPartition(
 
 private[spark]
 class CartesianRDD[T: ClassTag, U: ClassTag](
-    sc: SparkContext,
-    var rdd1 : RDD[T],
-    var rdd2 : RDD[U])
+                                              sc: SparkContext,
+                                              var rdd1: RDD[T],
+                                              var rdd2: RDD[U])
   extends RDD[(T, U)](sc, Nil)
-  with Serializable {
+    with Serializable {
 
   val numPartitionsInRdd2 = rdd2.partitions.length
 

@@ -18,20 +18,13 @@
 package org.apache.sparktest
 
 /**
- * A test suite to make sure all `implicit` functions work correctly.
- * Please don't `import org.apache.spark.SparkContext._` in this class.
- *
- * As `implicit` is a compiler feature, we don't need to run this class.
- * What we need to do is making the compiler happy.
- */
+  * A test suite to make sure all `implicit` functions work correctly.
+  * Please don't `import org.apache.spark.SparkContext._` in this class.
+  *
+  * As `implicit` is a compiler feature, we don't need to run this class.
+  * What we need to do is making the compiler happy.
+  */
 class ImplicitSuite {
-
-  // We only want to test if `implicit` works well with the compiler, so we don't need a real
-  // SparkContext.
-  def mockSparkContext[T]: org.apache.spark.SparkContext = null
-
-  // We only want to test if `implicit` works well with the compiler, so we don't need a real RDD.
-  def mockRDD[T]: org.apache.spark.rdd.RDD[T] = null
 
   def testRddToPairRDDFunctions(): Unit = {
     val rdd: org.apache.spark.rdd.RDD[(Int, Int)] = mockRDD
@@ -43,6 +36,9 @@ class ImplicitSuite {
     rdd.countAsync()
   }
 
+  // We only want to test if `implicit` works well with the compiler, so we don't need a real RDD.
+  def mockRDD[T]: org.apache.spark.rdd.RDD[T] = null
+
   def testRddToSequenceFileRDDFunctions(): Unit = {
     val rdd: org.apache.spark.rdd.RDD[(Int, Int)] = mockRDD
     rdd.saveAsSequenceFile("/a/test/path")
@@ -50,7 +46,7 @@ class ImplicitSuite {
 
   def testRddToSequenceFileRDDFunctionsWithWritable(): Unit = {
     val rdd: org.apache.spark.rdd.RDD[(org.apache.hadoop.io.IntWritable, org.apache.hadoop.io.Text)]
-      = mockRDD
+    = mockRDD
     rdd.saveAsSequenceFile("/a/test/path")
   }
 
@@ -108,6 +104,10 @@ class ImplicitSuite {
     val sc = mockSparkContext
     sc.sequenceFile[Double, Double]("/a/test/path")
   }
+
+  // We only want to test if `implicit` works well with the compiler, so we don't need a real
+  // SparkContext.
+  def mockSparkContext[T]: org.apache.spark.SparkContext = null
 
   def testFloatWritableConverter(): Unit = {
     val sc = mockSparkContext

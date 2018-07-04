@@ -17,16 +17,14 @@
 
 package org.apache.spark
 
-import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.security.GroupMappingServiceProvider
-import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
+import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv}
 
 class DummyGroupMappingServiceProvider extends GroupMappingServiceProvider {
 

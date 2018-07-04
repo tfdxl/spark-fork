@@ -17,50 +17,49 @@
 
 package org.apache.spark.util
 
-import scala.collection.mutable
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 
+import scala.collection.mutable
+
 
 /**
- * This abstraction helps with persisting and checkpointing RDDs and types derived from RDDs
- * (such as Graphs and DataFrames).  In documentation, we use the phrase "Dataset" to refer to
- * the distributed data type (RDD, Graph, etc.).
- *
- * Specifically, this abstraction automatically handles persisting and (optionally) checkpointing,
- * as well as unpersisting and removing checkpoint files.
- *
- * Users should call update() when a new Dataset has been created,
- * before the Dataset has been materialized.  After updating [[PeriodicCheckpointer]], users are
- * responsible for materializing the Dataset to ensure that persisting and checkpointing actually
- * occur.
- *
- * When update() is called, this does the following:
- *  - Persist new Dataset (if not yet persisted), and put in queue of persisted Datasets.
- *  - Unpersist Datasets from queue until there are at most 3 persisted Datasets.
- *  - If using checkpointing and the checkpoint interval has been reached,
- *     - Checkpoint the new Dataset, and put in a queue of checkpointed Datasets.
- *     - Remove older checkpoints.
- *
- * WARNINGS:
- *  - This class should NOT be copied (since copies may conflict on which Datasets should be
- *    checkpointed).
- *  - This class removes checkpoint files once later Datasets have been checkpointed.
- *    However, references to the older Datasets will still return isCheckpointed = true.
- *
- * @param checkpointInterval  Datasets will be checkpointed at this interval.
- *                            If this interval was set as -1, then checkpointing will be disabled.
- * @param sc  SparkContext for the Datasets given to this checkpointer
- * @tparam T  Dataset type, such as RDD[Double]
- */
+  * This abstraction helps with persisting and checkpointing RDDs and types derived from RDDs
+  * (such as Graphs and DataFrames).  In documentation, we use the phrase "Dataset" to refer to
+  * the distributed data type (RDD, Graph, etc.).
+  *
+  * Specifically, this abstraction automatically handles persisting and (optionally) checkpointing,
+  * as well as unpersisting and removing checkpoint files.
+  *
+  * Users should call update() when a new Dataset has been created,
+  * before the Dataset has been materialized.  After updating [[PeriodicCheckpointer]], users are
+  * responsible for materializing the Dataset to ensure that persisting and checkpointing actually
+  * occur.
+  *
+  * When update() is called, this does the following:
+  *  - Persist new Dataset (if not yet persisted), and put in queue of persisted Datasets.
+  *  - Unpersist Datasets from queue until there are at most 3 persisted Datasets.
+  *  - If using checkpointing and the checkpoint interval has been reached,
+  *     - Checkpoint the new Dataset, and put in a queue of checkpointed Datasets.
+  *     - Remove older checkpoints.
+  *
+  * WARNINGS:
+  *  - This class should NOT be copied (since copies may conflict on which Datasets should be
+  * checkpointed).
+  *  - This class removes checkpoint files once later Datasets have been checkpointed.
+  * However, references to the older Datasets will still return isCheckpointed = true.
+  *
+  * @param checkpointInterval Datasets will be checkpointed at this interval.
+  *                           If this interval was set as -1, then checkpointing will be disabled.
+  * @param sc                 SparkContext for the Datasets given to this checkpointer
+  * @tparam T Dataset type, such as RDD[Double]
+  */
 private[spark] abstract class PeriodicCheckpointer[T](
-    val checkpointInterval: Int,
-    val sc: SparkContext) extends Logging {
+                                                       val checkpointInterval: Int,
+                                                       val sc: SparkContext) extends Logging {
 
   /** FIFO queue of past checkpointed Datasets */
   private val checkpointQueue = mutable.Queue[T]()
@@ -72,12 +71,12 @@ private[spark] abstract class PeriodicCheckpointer[T](
   private var updateCount = 0
 
   /**
-   * Update with a new Dataset. Handle persistence and checkpointing as needed.
-   * Since this handles persistence and checkpointing, this should be called before the Dataset
-   * has been materialized.
-   *
-   * @param newData  New Dataset created from previous Datasets in the lineage.
-   */
+    * Update with a new Dataset. Handle persistence and checkpointing as needed.
+    * Since this handles persistence and checkpointing, this should be called before the Dataset
+    * has been materialized.
+    *
+    * @param newData New Dataset created from previous Datasets in the lineage.
+    */
   def update(newData: T): Unit = {
     persist(newData)
     persistedQueue.enqueue(newData)
@@ -109,27 +108,20 @@ private[spark] abstract class PeriodicCheckpointer[T](
     }
   }
 
-  /** Checkpoint the Dataset */
-  protected def checkpoint(data: T): Unit
-
-  /** Return true iff the Dataset is checkpointed */
-  protected def isCheckpointed(data: T): Boolean
+  /**
+    * Dequeue the oldest checkpointed Dataset, and remove its checkpoint files.
+    * This prints a warning but does not fail if the files cannot be removed.
+    */
+  private def removeCheckpointFile(): Unit = {
+    val old = checkpointQueue.dequeue()
+    // Since the old checkpoint is not deleted by Spark, we manually delete it.
+    getCheckpointFiles(old).foreach(
+      PeriodicCheckpointer.removeCheckpointFile(_, sc.hadoopConfiguration))
+  }
 
   /**
-   * Persist the Dataset.
-   * Note: This should handle checking the current [[StorageLevel]] of the Dataset.
-   */
-  protected def persist(data: T): Unit
-
-  /** Unpersist the Dataset */
-  protected def unpersist(data: T): Unit
-
-  /** Get list of checkpoint files for this given Dataset */
-  protected def getCheckpointFiles(data: T): Iterable[String]
-
-  /**
-   * Call this to unpersist the Dataset.
-   */
+    * Call this to unpersist the Dataset.
+    */
   def unpersistDataSet(): Unit = {
     while (persistedQueue.nonEmpty) {
       val dataToUnpersist = persistedQueue.dequeue()
@@ -138,8 +130,8 @@ private[spark] abstract class PeriodicCheckpointer[T](
   }
 
   /**
-   * Call this at the end to delete any remaining checkpoint files.
-   */
+    * Call this at the end to delete any remaining checkpoint files.
+    */
   def deleteAllCheckpoints(): Unit = {
     while (checkpointQueue.nonEmpty) {
       removeCheckpointFile()
@@ -147,9 +139,9 @@ private[spark] abstract class PeriodicCheckpointer[T](
   }
 
   /**
-   * Call this at the end to delete any remaining checkpoint files, except for the last checkpoint.
-   * Note that there may not be any checkpoints at all.
-   */
+    * Call this at the end to delete any remaining checkpoint files, except for the last checkpoint.
+    * Note that there may not be any checkpoints at all.
+    */
   def deleteAllCheckpointsButLast(): Unit = {
     while (checkpointQueue.size > 1) {
       removeCheckpointFile()
@@ -157,23 +149,30 @@ private[spark] abstract class PeriodicCheckpointer[T](
   }
 
   /**
-   * Get all current checkpoint files.
-   * This is useful in combination with [[deleteAllCheckpointsButLast()]].
-   */
+    * Get all current checkpoint files.
+    * This is useful in combination with [[deleteAllCheckpointsButLast()]].
+    */
   def getAllCheckpointFiles: Array[String] = {
     checkpointQueue.flatMap(getCheckpointFiles).toArray
   }
 
+  /** Checkpoint the Dataset */
+  protected def checkpoint(data: T): Unit
+
+  /** Return true iff the Dataset is checkpointed */
+  protected def isCheckpointed(data: T): Boolean
+
   /**
-   * Dequeue the oldest checkpointed Dataset, and remove its checkpoint files.
-   * This prints a warning but does not fail if the files cannot be removed.
-   */
-  private def removeCheckpointFile(): Unit = {
-    val old = checkpointQueue.dequeue()
-    // Since the old checkpoint is not deleted by Spark, we manually delete it.
-    getCheckpointFiles(old).foreach(
-      PeriodicCheckpointer.removeCheckpointFile(_, sc.hadoopConfiguration))
-  }
+    * Persist the Dataset.
+    * Note: This should handle checking the current [[StorageLevel]] of the Dataset.
+    */
+  protected def persist(data: T): Unit
+
+  /** Unpersist the Dataset */
+  protected def unpersist(data: T): Unit
+
+  /** Get list of checkpoint files for this given Dataset */
+  protected def getCheckpointFiles(data: T): Iterable[String]
 }
 
 private[spark] object PeriodicCheckpointer extends Logging {

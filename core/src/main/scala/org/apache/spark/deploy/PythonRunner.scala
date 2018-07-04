@@ -21,19 +21,19 @@ import java.io.File
 import java.net.{InetAddress, URI}
 import java.nio.file.Files
 
+import org.apache.spark.api.python.PythonUtils
+import org.apache.spark.internal.config._
+import org.apache.spark.util.{RedirectThread, Utils}
+import org.apache.spark.{SparkConf, SparkUserAppException}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
-import org.apache.spark.{SparkConf, SparkUserAppException}
-import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.internal.config._
-import org.apache.spark.util.{RedirectThread, Utils}
-
 /**
- * A main class used to launch Python applications. It executes python as a
- * subprocess and then has it connect back to the JVM to access system properties, etc.
- */
+  * A main class used to launch Python applications. It executes python as a
+  * subprocess and then has it connect back to the JVM to access system properties, etc.
+  */
 object PythonRunner {
   def main(args: Array[String]) {
     val pythonFile = args(0)
@@ -111,12 +111,12 @@ object PythonRunner {
   }
 
   /**
-   * Format the python file path so that it can be added to the PYTHONPATH correctly.
-   *
-   * Python does not understand URI schemes in paths. Before adding python files to the
-   * PYTHONPATH, we need to extract the path from the URI. This is safe to do because we
-   * currently only support local python files.
-   */
+    * Format the python file path so that it can be added to the PYTHONPATH correctly.
+    *
+    * Python does not understand URI schemes in paths. Before adding python files to the
+    * PYTHONPATH, we need to extract the path from the URI. This is safe to do because we
+    * currently only support local python files.
+    */
   def formatPath(path: String, testWindows: Boolean = false): String = {
     if (Utils.nonLocalPaths(path, testWindows).nonEmpty) {
       throw new IllegalArgumentException("Launching Python applications through " +
@@ -144,9 +144,9 @@ object PythonRunner {
   }
 
   /**
-   * Format each python file path in the comma-delimited list of paths, so it can be
-   * added to the PYTHONPATH correctly.
-   */
+    * Format each python file path in the comma-delimited list of paths, so it can be
+    * added to the PYTHONPATH correctly.
+    */
   def formatPaths(paths: String, testWindows: Boolean = false): Array[String] = {
     Option(paths).getOrElse("")
       .split(",")
@@ -155,10 +155,10 @@ object PythonRunner {
   }
 
   /**
-   * Resolves the ".py" files. ".py" file should not be added as is because PYTHONPATH does
-   * not expect a file. This method creates a temporary directory and puts the ".py" files
-   * if exist in the given paths.
-   */
+    * Resolves the ".py" files. ".py" file should not be added as is because PYTHONPATH does
+    * not expect a file. This method creates a temporary directory and puts the ".py" files
+    * if exist in the given paths.
+    */
   private def resolvePyFiles(pyFiles: Array[String]): Array[String] = {
     lazy val dest = Utils.createTempDir(namePrefix = "localPyFiles")
     pyFiles.flatMap { pyFile =>

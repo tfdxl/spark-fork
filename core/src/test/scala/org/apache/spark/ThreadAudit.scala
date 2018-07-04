@@ -17,57 +17,57 @@
 
 package org.apache.spark
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.internal.Logging
 
+import scala.collection.JavaConverters._
+
 /**
- * Thread audit for test suites.
- */
+  * Thread audit for test suites.
+  */
 trait ThreadAudit extends Logging {
 
   val threadWhiteList = Set(
     /**
-     * Netty related internal threads.
-     * These are excluded because their lifecycle is handled by the netty itself
-     * and spark has no explicit effect on them.
-     */
+      * Netty related internal threads.
+      * These are excluded because their lifecycle is handled by the netty itself
+      * and spark has no explicit effect on them.
+      */
     "netty.*",
 
     /**
-     * Netty related internal threads.
-     * A Single-thread singleton EventExecutor inside netty which creates such threads.
-     * These are excluded because their lifecycle is handled by the netty itself
-     * and spark has no explicit effect on them.
-     */
+      * Netty related internal threads.
+      * A Single-thread singleton EventExecutor inside netty which creates such threads.
+      * These are excluded because their lifecycle is handled by the netty itself
+      * and spark has no explicit effect on them.
+      */
     "globalEventExecutor.*",
 
     /**
-     * Netty related internal threads.
-     * Checks if a thread is alive periodically and runs a task when a thread dies.
-     * These are excluded because their lifecycle is handled by the netty itself
-     * and spark has no explicit effect on them.
-     */
+      * Netty related internal threads.
+      * Checks if a thread is alive periodically and runs a task when a thread dies.
+      * These are excluded because their lifecycle is handled by the netty itself
+      * and spark has no explicit effect on them.
+      */
     "threadDeathWatcher.*",
 
     /**
-     * During [[SparkContext]] creation [[org.apache.spark.rpc.netty.NettyRpcEnv]]
-     * creates event loops. One is wrapped inside
-     * [[org.apache.spark.network.server.TransportServer]]
-     * the other one is inside [[org.apache.spark.network.client.TransportClient]].
-     * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
-     * Manually checked and all of them stopped properly.
-     */
+      * During [[SparkContext]] creation [[org.apache.spark.rpc.netty.NettyRpcEnv]]
+      * creates event loops. One is wrapped inside
+      * [[org.apache.spark.network.server.TransportServer]]
+      * the other one is inside [[org.apache.spark.network.client.TransportClient]].
+      * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
+      * Manually checked and all of them stopped properly.
+      */
     "rpc-client.*",
     "rpc-server.*",
 
     /**
-     * During [[SparkContext]] creation BlockManager creates event loops. One is wrapped inside
-     * [[org.apache.spark.network.server.TransportServer]]
-     * the other one is inside [[org.apache.spark.network.client.TransportClient]].
-     * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
-     * Manually checked and all of them stopped properly.
-     */
+      * During [[SparkContext]] creation BlockManager creates event loops. One is wrapped inside
+      * [[org.apache.spark.network.server.TransportServer]]
+      * the other one is inside [[org.apache.spark.network.client.TransportClient]].
+      * The thread pools behind shut down asynchronously triggered by [[SparkContext#stop]].
+      * Manually checked and all of them stopped properly.
+      */
     "shuffle-client.*",
     "shuffle-server.*"
   )

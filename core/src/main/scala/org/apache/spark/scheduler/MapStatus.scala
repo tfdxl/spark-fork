@@ -19,38 +19,39 @@ package org.apache.spark.scheduler
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
-import org.roaringbitmap.RoaringBitmap
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
+import org.roaringbitmap.RoaringBitmap
+
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 /**
- * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
- * task ran on as well as the sizes of outputs for each reducer, for passing on to the reduce tasks.
- */
+  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
+  * task ran on as well as the sizes of outputs for each reducer, for passing on to the reduce tasks.
+  */
 private[spark] sealed trait MapStatus {
   /** Location where this task was run. */
   def location: BlockManagerId
 
   /**
-   * Estimated size for the reduce block, in bytes.
-   *
-   * If a block is non-empty, then this method MUST return a non-zero size.  This invariant is
-   * necessary for correctness, since block fetchers are allowed to skip zero-size blocks.
-   */
+    * Estimated size for the reduce block, in bytes.
+    *
+    * If a block is non-empty, then this method MUST return a non-zero size.  This invariant is
+    * necessary for correctness, since block fetchers are allowed to skip zero-size blocks.
+    */
   def getSizeForBlock(reduceId: Int): Long
 }
 
 
 private[spark] object MapStatus {
 
+  private[this] val LOG_BASE = 1.1
+
   def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
-    if (uncompressedSizes.length >  Option(SparkEnv.get)
+    if (uncompressedSizes.length > Option(SparkEnv.get)
       .map(_.conf.get(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS))
       .getOrElse(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS.defaultValue.get)) {
       HighlyCompressedMapStatus(loc, uncompressedSizes)
@@ -59,13 +60,11 @@ private[spark] object MapStatus {
     }
   }
 
-  private[this] val LOG_BASE = 1.1
-
   /**
-   * Compress a size in bytes to 8 bits for efficient reporting of map output sizes.
-   * We do this by encoding the log base 1.1 of the size as an integer, which can support
-   * sizes up to 35 GB with at most 10% error.
-   */
+    * Compress a size in bytes to 8 bits for efficient reporting of map output sizes.
+    * We do this by encoding the log base 1.1 of the size as an integer, which can support
+    * sizes up to 35 GB with at most 10% error.
+    */
   def compressSize(size: Long): Byte = {
     if (size == 0) {
       0
@@ -77,8 +76,8 @@ private[spark] object MapStatus {
   }
 
   /**
-   * Decompress an 8-bit encoded block size, using the reverse operation of compressSize.
-   */
+    * Decompress an 8-bit encoded block size, using the reverse operation of compressSize.
+    */
   def decompressSize(compressedSize: Byte): Long = {
     if (compressedSize == 0) {
       0
@@ -90,18 +89,16 @@ private[spark] object MapStatus {
 
 
 /**
- * A [[MapStatus]] implementation that tracks the size of each block. Size for each block is
- * represented using a single byte.
- *
- * @param loc location where the task is being executed.
- * @param compressedSizes size of the blocks, indexed by reduce partition id.
- */
+  * A [[MapStatus]] implementation that tracks the size of each block. Size for each block is
+  * represented using a single byte.
+  *
+  * @param loc             location where the task is being executed.
+  * @param compressedSizes size of the blocks, indexed by reduce partition id.
+  */
 private[spark] class CompressedMapStatus(
-    private[this] var loc: BlockManagerId,
-    private[this] var compressedSizes: Array[Byte])
+                                          private[this] var loc: BlockManagerId,
+                                          private[this] var compressedSizes: Array[Byte])
   extends MapStatus with Externalizable {
-
-  protected def this() = this(null, null.asInstanceOf[Array[Byte]])  // For deserialization only
 
   def this(loc: BlockManagerId, uncompressedSizes: Array[Long]) {
     this(loc, uncompressedSizes.map(MapStatus.compressSize))
@@ -125,32 +122,32 @@ private[spark] class CompressedMapStatus(
     compressedSizes = new Array[Byte](len)
     in.readFully(compressedSizes)
   }
+
+  protected def this() = this(null, null.asInstanceOf[Array[Byte]]) // For deserialization only
 }
 
 /**
- * A [[MapStatus]] implementation that stores the accurate size of huge blocks, which are larger
- * than spark.shuffle.accurateBlockThreshold. It stores the average size of other non-empty blocks,
- * plus a bitmap for tracking which blocks are empty.
- *
- * @param loc location where the task is being executed
- * @param numNonEmptyBlocks the number of non-empty blocks
- * @param emptyBlocks a bitmap tracking which blocks are empty
- * @param avgSize average size of the non-empty and non-huge blocks
- * @param hugeBlockSizes sizes of huge blocks by their reduceId.
- */
-private[spark] class HighlyCompressedMapStatus private (
-    private[this] var loc: BlockManagerId,
-    private[this] var numNonEmptyBlocks: Int,
-    private[this] var emptyBlocks: RoaringBitmap,
-    private[this] var avgSize: Long,
-    private var hugeBlockSizes: Map[Int, Byte])
+  * A [[MapStatus]] implementation that stores the accurate size of huge blocks, which are larger
+  * than spark.shuffle.accurateBlockThreshold. It stores the average size of other non-empty blocks,
+  * plus a bitmap for tracking which blocks are empty.
+  *
+  * @param loc               location where the task is being executed
+  * @param numNonEmptyBlocks the number of non-empty blocks
+  * @param emptyBlocks       a bitmap tracking which blocks are empty
+  * @param avgSize           average size of the non-empty and non-huge blocks
+  * @param hugeBlockSizes    sizes of huge blocks by their reduceId.
+  */
+private[spark] class HighlyCompressedMapStatus private(
+                                                        private[this] var loc: BlockManagerId,
+                                                        private[this] var numNonEmptyBlocks: Int,
+                                                        private[this] var emptyBlocks: RoaringBitmap,
+                                                        private[this] var avgSize: Long,
+                                                        private var hugeBlockSizes: Map[Int, Byte])
   extends MapStatus with Externalizable {
 
   // loc could be null when the default constructor is called during deserialization
   require(loc == null || avgSize > 0 || hugeBlockSizes.size > 0 || numNonEmptyBlocks == 0,
     "Average size can only be zero for map stages that produced no output")
-
-  protected def this() = this(null, -1, null, -1, null)  // For deserialization only
 
   override def location: BlockManagerId = loc
 
@@ -191,6 +188,8 @@ private[spark] class HighlyCompressedMapStatus private (
     }
     hugeBlockSizes = hugeBlockSizesArray.toMap
   }
+
+  protected def this() = this(null, -1, null, -1, null) // For deserialization only
 }
 
 private[spark] object HighlyCompressedMapStatus {

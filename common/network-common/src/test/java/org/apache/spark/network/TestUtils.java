@@ -20,11 +20,16 @@ package org.apache.spark.network;
 import java.net.InetAddress;
 
 public class TestUtils {
+
     public static String getLocalHost() {
         try {
             return InetAddress.getLocalHost().getHostAddress();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static void main(String[] args) {
+        System.err.println(TestUtils.getLocalHost());
     }
 }

@@ -18,15 +18,15 @@
 package org.apache.spark.deploy
 
 /**
- * Used to send state on-the-wire about Executors from Worker to Master.
- * This state is sufficient for the Master to reconstruct its internal data structures during
- * failover.
- */
+  * Used to send state on-the-wire about Executors from Worker to Master.
+  * This state is sufficient for the Master to reconstruct its internal data structures during
+  * failover.
+  */
 private[deploy] class ExecutorDescription(
-    val appId: String,
-    val execId: Int,
-    val cores: Int,
-    val state: ExecutorState.Value)
+                                           val appId: String,
+                                           val execId: Int,
+                                           val cores: Int,
+                                           val state: ExecutorState.Value)
   extends Serializable {
 
   override def toString: String =

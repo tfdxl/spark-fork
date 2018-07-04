@@ -17,15 +17,15 @@
 
 package org.apache.spark
 
+import org.apache.spark.security.EncryptionFunSuite
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.io.ChunkedByteBuffer
 import org.scalatest.Matchers
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}
 
-import org.apache.spark.security.EncryptionFunSuite
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-import org.apache.spark.util.io.ChunkedByteBuffer
-
 class NotSerializableClass
+
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
 
 
@@ -106,7 +106,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc = new SparkContext(clusterUrl, "test")
     val array = new Array[Int](100)
     val bv = sc.broadcast(array)
-    array(2) = 3     // Change the array -- this should not be seen on workers
+    array(2) = 3 // Change the array -- this should not be seen on workers
     val rdd = sc.parallelize(1 to 10, 10)
     val sum = rdd.map(x => bv.value.sum).reduce(_ + _)
     assert(sum === 0)
@@ -233,7 +233,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("recover from node failures") {
-    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    import DistributedSuite.{failOnMarkedIdentity, markNodeIfIdentity}
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(Seq(true, true), 2)
@@ -243,7 +243,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("recover from repeated node failures during shuffle-map") {
-    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    import DistributedSuite.{failOnMarkedIdentity, markNodeIfIdentity}
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
     for (i <- 1 to 3) {
@@ -255,7 +255,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("recover from repeated node failures during shuffle-reduce") {
-    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    import DistributedSuite.{failOnMarkedIdentity, markNodeIfIdentity}
     DistributedSuite.amMaster = true
     sc = new SparkContext(clusterUrl, "test")
     for (i <- 1 to 3) {
@@ -265,16 +265,16 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
       // This relies on mergeCombiners being used to perform the actual reduce for this
       // test to actually be testing what it claims.
       val grouped = data.map(x => x -> x).combineByKey(
-                      x => x,
-                      (x: Boolean, y: Boolean) => x,
-                      (x: Boolean, y: Boolean) => failOnMarkedIdentity(x)
-                    )
+        x => x,
+        (x: Boolean, y: Boolean) => x,
+        (x: Boolean, y: Boolean) => failOnMarkedIdentity(x)
+      )
       assert(grouped.collect.size === 1)
     }
   }
 
   test("recover from node failures with replication") {
-    import DistributedSuite.{markNodeIfIdentity, failOnMarkedIdentity}
+    import DistributedSuite.{failOnMarkedIdentity, markNodeIfIdentity}
     DistributedSuite.amMaster = true
     // Using more than two nodes so we don't have a symmetric communication pattern and might
     // cache a partially correct list of peers.
@@ -306,13 +306,13 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
     failAfter(Span(3000, Millis)) {
       try {
-        while (! sc.getRDDStorageInfo.isEmpty) {
+        while (!sc.getRDDStorageInfo.isEmpty) {
           Thread.sleep(200)
         }
       } catch {
         case _: Throwable => Thread.sleep(10)
-          // Do nothing. We might see exceptions because block manager
-          // is racing this thread to remove entries from the driver.
+        // Do nothing. We might see exceptions because block manager
+        // is racing this thread to remove entries from the driver.
       }
     }
   }

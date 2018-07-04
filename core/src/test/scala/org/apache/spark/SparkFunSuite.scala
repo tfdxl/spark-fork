@@ -20,43 +20,61 @@ package org.apache.spark
 // scalastyle:off
 import java.io.File
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.AccumulatorContext
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
 
 /**
- * Base abstract class for all unit tests in Spark for handling common functionality.
- *
- * Thread audit happens normally here automatically when a new test suite created.
- * The only prerequisite for that is that the test class must extend [[SparkFunSuite]].
- *
- * It is possible to override the default thread audit behavior by setting enableAutoThreadAudit
- * to false and manually calling the audit methods, if desired. For example:
- *
- * class MyTestSuite extends SparkFunSuite {
- *
- *   override val enableAutoThreadAudit = false
- *
- *   protected override def beforeAll(): Unit = {
- *     doThreadPreAudit()
- *     super.beforeAll()
- *   }
- *
- *   protected override def afterAll(): Unit = {
- *     super.afterAll()
- *     doThreadPostAudit()
- *   }
- * }
- */
+  * Base abstract class for all unit tests in Spark for handling common functionality.
+  *
+  * Thread audit happens normally here automatically when a new test suite created.
+  * The only prerequisite for that is that the test class must extend [[SparkFunSuite]].
+  *
+  * It is possible to override the default thread audit behavior by setting enableAutoThreadAudit
+  * to false and manually calling the audit methods, if desired. For example:
+  *
+  * class MyTestSuite extends SparkFunSuite {
+  *
+  * override val enableAutoThreadAudit = false
+  *
+  * protected override def beforeAll(): Unit = {
+  * doThreadPreAudit()
+  *     super.beforeAll()
+  * }
+  *
+  * protected override def afterAll(): Unit = {
+  *     super.afterAll()
+  * doThreadPostAudit()
+  * }
+  * }
+  */
 abstract class SparkFunSuite
   extends FunSuite
-  with BeforeAndAfterAll
-  with ThreadAudit
-  with Logging {
-// scalastyle:on
+    with BeforeAndAfterAll
+    with ThreadAudit
+    with Logging {
+  // scalastyle:on
 
   protected val enableAutoThreadAudit = true
+
+  /**
+    * Log the suite name and the test name before and after each test.
+    *
+    * Subclasses should never override this method. If they wish to run
+    * custom code before and after each test, they should mix in the
+    * {{org.scalatest.BeforeAndAfter}} trait instead.
+    */
+  final protected override def withFixture(test: NoArgTest): Outcome = {
+    val testName = test.text
+    val suiteName = this.getClass.getName
+    val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
+    try {
+      logInfo(s"\n\n===== TEST OUTPUT FOR $shortSuiteName: '$testName' =====\n")
+      test()
+    } finally {
+      logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
+    }
+  }
 
   protected override def beforeAll(): Unit = {
     System.setProperty("spark.testing", "true")
@@ -78,32 +96,13 @@ abstract class SparkFunSuite
     }
   }
 
-  // helper function
-  protected final def getTestResourceFile(file: String): File = {
-    new File(getClass.getClassLoader.getResource(file).getFile)
-  }
-
   protected final def getTestResourcePath(file: String): String = {
     getTestResourceFile(file).getCanonicalPath
   }
 
-  /**
-   * Log the suite name and the test name before and after each test.
-   *
-   * Subclasses should never override this method. If they wish to run
-   * custom code before and after each test, they should mix in the
-   * {{org.scalatest.BeforeAndAfter}} trait instead.
-   */
-  final protected override def withFixture(test: NoArgTest): Outcome = {
-    val testName = test.text
-    val suiteName = this.getClass.getName
-    val shortSuiteName = suiteName.replaceAll("org.apache.spark", "o.a.s")
-    try {
-      logInfo(s"\n\n===== TEST OUTPUT FOR $shortSuiteName: '$testName' =====\n")
-      test()
-    } finally {
-      logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
-    }
+  // helper function
+  protected final def getTestResourceFile(file: String): File = {
+    new File(getClass.getClassLoader.getResource(file).getFile)
   }
 
 }

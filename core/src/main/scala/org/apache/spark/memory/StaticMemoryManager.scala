@@ -21,22 +21,31 @@ import org.apache.spark.SparkConf
 import org.apache.spark.storage.BlockId
 
 /**
- * A [[MemoryManager]] that statically partitions the heap space into disjoint regions.
- *
- * The sizes of the execution and storage regions are determined through
- * `spark.shuffle.memoryFraction` and `spark.storage.memoryFraction` respectively. The two
- * regions are cleanly separated such that neither usage can borrow memory from the other.
- */
+  * A [[MemoryManager]] that statically partitions the heap space into disjoint regions.
+  *
+  * The sizes of the execution and storage regions are determined through
+  * `spark.shuffle.memoryFraction` and `spark.storage.memoryFraction` respectively. The two
+  * regions are cleanly separated such that neither usage can borrow memory from the other.
+  */
 private[spark] class StaticMemoryManager(
-    conf: SparkConf,
-    maxOnHeapExecutionMemory: Long,
-    override val maxOnHeapStorageMemory: Long,
-    numCores: Int)
+                                          conf: SparkConf,
+                                          maxOnHeapExecutionMemory: Long,
+                                          override val maxOnHeapStorageMemory: Long,
+                                          numCores: Int)
   extends MemoryManager(
     conf,
     numCores,
     maxOnHeapStorageMemory,
     maxOnHeapExecutionMemory) {
+
+  // Max number of bytes worth of blocks to evict when unrolling
+  private val maxUnrollMemory: Long = {
+    (maxOnHeapStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
+  }
+
+  // The StaticMemoryManager does not support off-heap storage memory:
+  offHeapExecutionMemoryPool.incrementPoolSize(offHeapStorageMemoryPool.poolSize)
+  offHeapStorageMemoryPool.decrementPoolSize(offHeapStorageMemoryPool.poolSize)
 
   def this(conf: SparkConf, numCores: Int) {
     this(
@@ -46,21 +55,12 @@ private[spark] class StaticMemoryManager(
       numCores)
   }
 
-  // The StaticMemoryManager does not support off-heap storage memory:
-  offHeapExecutionMemoryPool.incrementPoolSize(offHeapStorageMemoryPool.poolSize)
-  offHeapStorageMemoryPool.decrementPoolSize(offHeapStorageMemoryPool.poolSize)
-
-  // Max number of bytes worth of blocks to evict when unrolling
-  private val maxUnrollMemory: Long = {
-    (maxOnHeapStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
-  }
-
   override def maxOffHeapStorageMemory: Long = 0L
 
   override def acquireStorageMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      memoryMode: MemoryMode): Boolean = synchronized {
+                                     blockId: BlockId,
+                                     numBytes: Long,
+                                     memoryMode: MemoryMode): Boolean = synchronized {
     require(memoryMode != MemoryMode.OFF_HEAP,
       "StaticMemoryManager does not support off-heap storage memory")
     if (numBytes > maxOnHeapStorageMemory) {
@@ -74,9 +74,9 @@ private[spark] class StaticMemoryManager(
   }
 
   override def acquireUnrollMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      memoryMode: MemoryMode): Boolean = synchronized {
+                                    blockId: BlockId,
+                                    numBytes: Long,
+                                    memoryMode: MemoryMode): Boolean = synchronized {
     require(memoryMode != MemoryMode.OFF_HEAP,
       "StaticMemoryManager does not support off-heap unroll memory")
     val currentUnrollMemory = onHeapStorageMemoryPool.memoryStore.currentUnrollMemory
@@ -93,9 +93,9 @@ private[spark] class StaticMemoryManager(
 
   private[memory]
   override def acquireExecutionMemory(
-      numBytes: Long,
-      taskAttemptId: Long,
-      memoryMode: MemoryMode): Long = synchronized {
+                                       numBytes: Long,
+                                       taskAttemptId: Long,
+                                       memoryMode: MemoryMode): Long = synchronized {
     memoryMode match {
       case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
       case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
@@ -109,8 +109,8 @@ private[spark] object StaticMemoryManager {
   private val MIN_MEMORY_BYTES = 32 * 1024 * 1024
 
   /**
-   * Return the total amount of memory available for the storage region, in bytes.
-   */
+    * Return the total amount of memory available for the storage region, in bytes.
+    */
   private def getMaxStorageMemory(conf: SparkConf): Long = {
     val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
@@ -119,8 +119,8 @@ private[spark] object StaticMemoryManager {
   }
 
   /**
-   * Return the total amount of memory available for the execution region, in bytes.
-   */
+    * Return the total amount of memory available for the execution region, in bytes.
+    */
   private def getMaxExecutionMemory(conf: SparkConf): Long = {
     val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
 

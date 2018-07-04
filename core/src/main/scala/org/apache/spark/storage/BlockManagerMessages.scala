@@ -23,10 +23,16 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] object BlockManagerMessages {
+
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from the master to slaves.
   //////////////////////////////////////////////////////////////////////////////////
   sealed trait ToBlockManagerSlave
+
+  //////////////////////////////////////////////////////////////////////////////////
+  // Messages from slaves to the master.
+  //////////////////////////////////////////////////////////////////////////////////
+  sealed trait ToBlockManagerMaster
 
   // Remove a block from the slaves that have it. This can only be used to remove
   // blocks that the master knows about.
@@ -46,33 +52,23 @@ private[spark] object BlockManagerMessages {
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerSlave
 
-  /**
-   * Driver to Executor message to trigger a thread dump.
-   */
-  case object TriggerThreadDump extends ToBlockManagerSlave
-
-  //////////////////////////////////////////////////////////////////////////////////
-  // Messages from slaves to the master.
-  //////////////////////////////////////////////////////////////////////////////////
-  sealed trait ToBlockManagerMaster
-
   case class RegisterBlockManager(
-      blockManagerId: BlockManagerId,
-      maxOnHeapMemSize: Long,
-      maxOffHeapMemSize: Long,
-      sender: RpcEndpointRef)
+                                   blockManagerId: BlockManagerId,
+                                   maxOnHeapMemSize: Long,
+                                   maxOffHeapMemSize: Long,
+                                   sender: RpcEndpointRef)
     extends ToBlockManagerMaster
 
   case class UpdateBlockInfo(
-      var blockManagerId: BlockManagerId,
-      var blockId: BlockId,
-      var storageLevel: StorageLevel,
-      var memSize: Long,
-      var diskSize: Long)
+                              var blockManagerId: BlockManagerId,
+                              var blockId: BlockId,
+                              var storageLevel: StorageLevel,
+                              var memSize: Long,
+                              var diskSize: Long)
     extends ToBlockManagerMaster
-    with Externalizable {
+      with Externalizable {
 
-    def this() = this(null, null, null, 0, 0)  // For deserialization only
+    def this() = this(null, null, null, 0, 0) // For deserialization only
 
     override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
       blockManagerId.writeExternal(out)
@@ -108,12 +104,6 @@ private[spark] object BlockManagerMessages {
 
   case class RemoveExecutor(execId: String) extends ToBlockManagerMaster
 
-  case object StopBlockManagerMaster extends ToBlockManagerMaster
-
-  case object GetMemoryStatus extends ToBlockManagerMaster
-
-  case object GetStorageStatus extends ToBlockManagerMaster
-
   case class GetBlockStatus(blockId: BlockId, askSlaves: Boolean = true)
     extends ToBlockManagerMaster
 
@@ -123,4 +113,16 @@ private[spark] object BlockManagerMessages {
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
   case class HasCachedBlocks(executorId: String) extends ToBlockManagerMaster
+
+  /**
+    * Driver to Executor message to trigger a thread dump.
+    */
+  case object TriggerThreadDump extends ToBlockManagerSlave
+
+  case object StopBlockManagerMaster extends ToBlockManagerMaster
+
+  case object GetMemoryStatus extends ToBlockManagerMaster
+
+  case object GetStorageStatus extends ToBlockManagerMaster
+
 }

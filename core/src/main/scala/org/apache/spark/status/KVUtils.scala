@@ -19,41 +19,29 @@ package org.apache.spark.status
 
 import java.io.File
 
+import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.kvstore._
+
 import scala.annotation.meta.getter
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
-import scala.reflect.{classTag, ClassTag}
-
-import com.fasterxml.jackson.annotation.JsonInclude
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
-
-import org.apache.spark.internal.Logging
-import org.apache.spark.util.kvstore._
+import scala.reflect.{ClassTag, classTag}
 
 private[spark] object KVUtils extends Logging {
 
   /** Use this to annotate constructor params to be used as KVStore indices. */
-  type KVIndexParam = KVIndex @getter
+  type KVIndexParam = KVIndex@getter
 
   /**
-   * A KVStoreSerializer that provides Scala types serialization too, and uses the same options as
-   * the API serializer.
-   */
-  private[spark] class KVStoreScalaSerializer extends KVStoreSerializer {
-
-    mapper.registerModule(DefaultScalaModule)
-    mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
-
-  }
-
-  /**
-   * Open or create a LevelDB store.
-   *
-   * @param path Location of the store.
-   * @param metadata Metadata value to compare to the data in the store. If the store does not
-   *                 contain any metadata (e.g. it's a new store), this value is written as
-   *                 the store's metadata.
-   */
+    * Open or create a LevelDB store.
+    *
+    * @param path     Location of the store.
+    * @param metadata Metadata value to compare to the data in the store. If the store does not
+    *                 contain any metadata (e.g. it's a new store), this value is written as
+    *                 the store's metadata.
+    */
   def open[M: ClassTag](path: File, metadata: M): LevelDB = {
     require(metadata != null, "Metadata is required.")
 
@@ -71,15 +59,26 @@ private[spark] object KVUtils extends Logging {
 
   /** Turns a KVStoreView into a Scala sequence, applying a filter. */
   def viewToSeq[T](
-      view: KVStoreView[T],
-      max: Int)
-      (filter: T => Boolean): Seq[T] = {
+                    view: KVStoreView[T],
+                    max: Int)
+                  (filter: T => Boolean): Seq[T] = {
     val iter = view.closeableIterator()
     try {
       iter.asScala.filter(filter).take(max).toList
     } finally {
       iter.close()
     }
+  }
+
+  /**
+    * A KVStoreSerializer that provides Scala types serialization too, and uses the same options as
+    * the API serializer.
+    */
+  private[spark] class KVStoreScalaSerializer extends KVStoreSerializer {
+
+    mapper.registerModule(DefaultScalaModule)
+    mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
+
   }
 
   private[spark] class MetadataMismatchException extends Exception

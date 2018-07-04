@@ -20,13 +20,17 @@ package org.apache.spark.util
 import org.apache.spark.internal.Logging
 
 /**
- * The default uncaught exception handler for Spark daemons. It terminates the whole process for
- * any Errors, and also terminates the process for Exceptions when the exitOnException flag is true.
- *
- * @param exitOnUncaughtException Whether to exit the process on UncaughtException.
- */
+  * The default uncaught exception handler for Spark daemons. It terminates the whole process for
+  * any Errors, and also terminates the process for Exceptions when the exitOnException flag is true.
+  *
+  * @param exitOnUncaughtException Whether to exit the process on UncaughtException.
+  */
 private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: Boolean = true)
   extends Thread.UncaughtExceptionHandler with Logging {
+
+  def uncaughtException(exception: Throwable) {
+    uncaughtException(Thread.currentThread(), exception)
+  }
 
   override def uncaughtException(thread: Thread, exception: Throwable) {
     try {
@@ -54,9 +58,5 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
       case oom: OutOfMemoryError => Runtime.getRuntime.halt(SparkExitCode.OOM)
       case t: Throwable => Runtime.getRuntime.halt(SparkExitCode.UNCAUGHT_EXCEPTION_TWICE)
     }
-  }
-
-  def uncaughtException(exception: Throwable) {
-    uncaughtException(Thread.currentThread(), exception)
   }
 }

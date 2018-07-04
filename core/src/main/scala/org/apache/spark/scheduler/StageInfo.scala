@@ -17,39 +17,38 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.RDDInfo
 
+import scala.collection.mutable.HashMap
+
 /**
- * :: DeveloperApi ::
- * Stores information about a stage to pass from the scheduler to SparkListeners.
- */
+  * :: DeveloperApi ::
+  * Stores information about a stage to pass from the scheduler to SparkListeners.
+  */
 @DeveloperApi
 class StageInfo(
-    val stageId: Int,
-    @deprecated("Use attemptNumber instead", "2.3.0") val attemptId: Int,
-    val name: String,
-    val numTasks: Int,
-    val rddInfos: Seq[RDDInfo],
-    val parentIds: Seq[Int],
-    val details: String,
-    val taskMetrics: TaskMetrics = null,
-    private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) {
+                 val stageId: Int,
+                 @deprecated("Use attemptNumber instead", "2.3.0") val attemptId: Int,
+                 val name: String,
+                 val numTasks: Int,
+                 val rddInfos: Seq[RDDInfo],
+                 val parentIds: Seq[Int],
+                 val details: String,
+                 val taskMetrics: TaskMetrics = null,
+                 private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) {
+  /**
+    * Terminal values of accumulables updated during this stage, including all the user-defined
+    * accumulators.
+    */
+  val accumulables = HashMap[Long, AccumulableInfo]()
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   /** Time when all tasks in the stage completed or when the stage was cancelled. */
   var completionTime: Option[Long] = None
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None
-
-  /**
-   * Terminal values of accumulables updated during this stage, including all the user-defined
-   * accumulators.
-   */
-  val accumulables = HashMap[Long, AccumulableInfo]()
 
   def stageFailed(reason: String) {
     failureReason = Some(reason)
@@ -73,19 +72,19 @@ class StageInfo(
 
 private[spark] object StageInfo {
   /**
-   * Construct a StageInfo from a Stage.
-   *
-   * Each Stage is associated with one or many RDDs, with the boundary of a Stage marked by
-   * shuffle dependencies. Therefore, all ancestor RDDs related to this Stage's RDD through a
-   * sequence of narrow dependencies should also be associated with this Stage.
-   */
+    * Construct a StageInfo from a Stage.
+    *
+    * Each Stage is associated with one or many RDDs, with the boundary of a Stage marked by
+    * shuffle dependencies. Therefore, all ancestor RDDs related to this Stage's RDD through a
+    * sequence of narrow dependencies should also be associated with this Stage.
+    */
   def fromStage(
-      stage: Stage,
-      attemptId: Int,
-      numTasks: Option[Int] = None,
-      taskMetrics: TaskMetrics = null,
-      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
-    ): StageInfo = {
+                 stage: Stage,
+                 attemptId: Int,
+                 numTasks: Option[Int] = None,
+                 taskMetrics: TaskMetrics = null,
+                 taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
+               ): StageInfo = {
     val ancestorRddInfos = stage.rdd.getNarrowAncestors.map(RDDInfo.fromRdd)
     val rddInfos = Seq(RDDInfo.fromRdd(stage.rdd)) ++ ancestorRddInfos
     new StageInfo(

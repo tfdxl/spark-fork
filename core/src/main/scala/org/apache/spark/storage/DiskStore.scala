@@ -19,42 +19,45 @@ package org.apache.spark.storage
 
 import java.io._
 import java.nio.ByteBuffer
-import java.nio.channels.{Channels, ReadableByteChannel, WritableByteChannel}
 import java.nio.channels.FileChannel.MapMode
+import java.nio.channels.{Channels, ReadableByteChannel, WritableByteChannel}
 import java.util.concurrent.ConcurrentHashMap
-
-import scala.collection.mutable.ListBuffer
 
 import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
-
-import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
+import org.apache.spark.{SecurityManager, SparkConf}
+
+import scala.collection.mutable.ListBuffer
 
 /**
- * Stores BlockManager blocks on disk.
- */
+  * Stores BlockManager blocks on disk.
+  */
 private[spark] class DiskStore(
-    conf: SparkConf,
-    diskManager: DiskBlockManager,
-    securityManager: SecurityManager) extends Logging {
+                                conf: SparkConf,
+                                diskManager: DiskBlockManager,
+                                securityManager: SecurityManager) extends Logging {
 
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
   private val maxMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests",
     Int.MaxValue.toString)
   private val blockSizes = new ConcurrentHashMap[BlockId, Long]()
 
-  def getSize(blockId: BlockId): Long = blockSizes.get(blockId)
+  def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
+    put(blockId) { channel =>
+      bytes.writeFully(channel)
+    }
+  }
 
   /**
-   * Invokes the provided callback function to write the specific block.
-   *
-   * @throws IllegalStateException if the block already exists in the disk store.
-   */
+    * Invokes the provided callback function to write the specific block.
+    *
+    * @throws IllegalStateException if the block already exists in the disk store.
+    */
   def put(blockId: BlockId)(writeFunc: WritableByteChannel => Unit): Unit = {
     if (contains(blockId)) {
       throw new IllegalStateException(s"Block $blockId is already present in the disk store")
@@ -78,7 +81,7 @@ private[spark] class DiskStore(
             throw ioe
           }
       } finally {
-         if (threwException) {
+        if (threwException) {
           remove(blockId)
         }
       }
@@ -88,27 +91,6 @@ private[spark] class DiskStore(
       file.getName,
       Utils.bytesToString(file.length()),
       finishTime - startTime))
-  }
-
-  def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
-    put(blockId) { channel =>
-      bytes.writeFully(channel)
-    }
-  }
-
-  def getBytes(blockId: BlockId): BlockData = {
-    val file = diskManager.getFile(blockId.name)
-    val blockSize = getSize(blockId)
-
-    securityManager.getIOEncryptionKey() match {
-      case Some(key) =>
-        // Encrypted blocks cannot be memory mapped; return a special object that does decryption
-        // and provides InputStream / FileRegion implementations for reading the data.
-        new EncryptedBlockData(file, blockSize, conf, key)
-
-      case _ =>
-        new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, file, blockSize)
-    }
   }
 
   def remove(blockId: BlockId): Boolean = {
@@ -144,22 +126,41 @@ private[spark] class DiskStore(
     }
   }
 
+  def getBytes(blockId: BlockId): BlockData = {
+    val file = diskManager.getFile(blockId.name)
+    val blockSize = getSize(blockId)
+
+    securityManager.getIOEncryptionKey() match {
+      case Some(key) =>
+        // Encrypted blocks cannot be memory mapped; return a special object that does decryption
+        // and provides InputStream / FileRegion implementations for reading the data.
+        new EncryptedBlockData(file, blockSize, conf, key)
+
+      case _ =>
+        new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, file, blockSize)
+    }
+  }
+
+  def getSize(blockId: BlockId): Long = blockSizes.get(blockId)
+
 }
 
 private class DiskBlockData(
-    minMemoryMapBytes: Long,
-    maxMemoryMapBytes: Long,
-    file: File,
-    blockSize: Long) extends BlockData {
+                             minMemoryMapBytes: Long,
+                             maxMemoryMapBytes: Long,
+                             file: File,
+                             blockSize: Long) extends BlockData {
 
   override def toInputStream(): InputStream = new FileInputStream(file)
 
   /**
-  * Returns a Netty-friendly wrapper for the block's data.
-  *
-  * Please see `ManagedBuffer.convertToNetty()` for more details.
-  */
+    * Returns a Netty-friendly wrapper for the block's data.
+    *
+    * Please see `ManagedBuffer.convertToNetty()` for more details.
+    */
   override def toNetty(): AnyRef = new DefaultFileRegion(file, 0, size)
+
+  override def size: Long = blockSize
 
   override def toChunkedByteBuffer(allocator: (Int) => ByteBuffer): ChunkedByteBuffer = {
     Utils.tryWithResource(open()) { channel =>
@@ -180,7 +181,7 @@ private class DiskBlockData(
   override def toByteBuffer(): ByteBuffer = {
     require(blockSize < maxMemoryMapBytes,
       s"can't create a byte buffer of size $blockSize" +
-      s" since it exceeds ${Utils.bytesToString(maxMemoryMapBytes)}.")
+        s" since it exceeds ${Utils.bytesToString(maxMemoryMapBytes)}.")
     Utils.tryWithResource(open()) { channel =>
       if (blockSize < minMemoryMapBytes) {
         // For small files, directly read rather than memory map.
@@ -194,18 +195,16 @@ private class DiskBlockData(
     }
   }
 
-  override def size: Long = blockSize
+  private def open() = new FileInputStream(file).getChannel
 
   override def dispose(): Unit = {}
-
-  private def open() = new FileInputStream(file).getChannel
 }
 
 private class EncryptedBlockData(
-    file: File,
-    blockSize: Long,
-    conf: SparkConf,
-    key: Array[Byte]) extends BlockData {
+                                  file: File,
+                                  blockSize: Long,
+                                  conf: SparkConf,
+                                  key: Array[Byte]) extends BlockData {
 
   override def toInputStream(): InputStream = Channels.newInputStream(open())
 
@@ -247,10 +246,6 @@ private class EncryptedBlockData(
     }
   }
 
-  override def size: Long = blockSize
-
-  override def dispose(): Unit = { }
-
   private def open(): ReadableByteChannel = {
     val channel = new FileInputStream(file).getChannel()
     try {
@@ -262,14 +257,17 @@ private class EncryptedBlockData(
     }
   }
 
+  override def size: Long = blockSize
+
+  override def dispose(): Unit = {}
+
 }
 
 private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: Long)
   extends AbstractFileRegion {
 
-  private var _transferred = 0L
-
   private val buffer = ByteBuffer.allocateDirect(64 * 1024)
+  private var _transferred = 0L
   buffer.flip()
 
   override def count(): Long = blockSize

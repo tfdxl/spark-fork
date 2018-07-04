@@ -19,18 +19,17 @@ package org.apache.spark
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.collection.JavaConverters._
-import scala.concurrent.duration._
-import scala.language.postfixOps
-import scala.util.{Random, Try}
-
 import com.esotericsoftware.kryo.Kryo
-
 import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
+
+import scala.collection.JavaConverters._
+import scala.concurrent.duration._
+import scala.language.postfixOps
+import scala.util.{Random, Try}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -103,7 +102,9 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.contains("k1"), "conf did not contain k1")
     assert(!conf.contains("k4"), "conf contained k4")
     assert(conf.get("k1") === "v4")
-    intercept[Exception] { conf.get("k4") }
+    intercept[Exception] {
+      conf.get("k4")
+    }
     assert(conf.get("k4", "not found") === "not found")
     assert(conf.getOption("k1") === Some("v4"))
     assert(conf.getOption("k4") === None)
@@ -111,17 +112,23 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
   test("creating SparkContext without master and app name") {
     val conf = new SparkConf(false)
-    intercept[SparkException] { sc = new SparkContext(conf) }
+    intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }
   }
 
   test("creating SparkContext without master") {
     val conf = new SparkConf(false).setAppName("My app")
-    intercept[SparkException] { sc = new SparkContext(conf) }
+    intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }
   }
 
   test("creating SparkContext without app name") {
     val conf = new SparkConf(false).setMaster("local")
-    intercept[SparkException] { sc = new SparkContext(conf) }
+    intercept[SparkException] {
+      sc = new SparkContext(conf)
+    }
   }
 
   test("creating SparkContext with both master and app name") {
@@ -340,7 +347,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   val defaultIllegalValue = "SomeIllegalValue"
-  val illegalValueTests : Map[String, (SparkConf, String) => Any] = Map(
+  val illegalValueTests: Map[String, (SparkConf, String) => Any] = Map(
     "getTimeAsSeconds" -> (_.getTimeAsSeconds(_)),
     "getTimeAsSeconds with default" -> (_.getTimeAsSeconds(_, defaultIllegalValue)),
     "getTimeAsMs" -> (_.getTimeAsMs(_)),
@@ -374,7 +381,9 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 }
 
 class Class1 {}
+
 class Class2 {}
+
 class Class3 {}
 
 class CustomRegistrator extends KryoRegistrator {

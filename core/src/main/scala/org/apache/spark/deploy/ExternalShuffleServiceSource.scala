@@ -17,15 +17,13 @@
 
 package org.apache.spark.deploy
 
-import javax.annotation.concurrent.ThreadSafe
-
 import com.codahale.metrics.{MetricRegistry, MetricSet}
-
+import javax.annotation.concurrent.ThreadSafe
 import org.apache.spark.metrics.source.Source
 
 /**
- * Provides metrics source for external shuffle service
- */
+  * Provides metrics source for external shuffle service
+  */
 @ThreadSafe
 private class ExternalShuffleServiceSource extends Source {
   override val metricRegistry = new MetricRegistry()

@@ -19,11 +19,10 @@ package org.apache.spark
 
 import java.io.File
 
+import org.apache.spark.util.Utils
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.time.SpanSugar._
-
-import org.apache.spark.util.Utils
 
 class DriverSuite extends SparkFunSuite with TimeLimits {
 
@@ -38,7 +37,9 @@ class DriverSuite extends SparkFunSuite with TimeLimits {
         Seq(s"$sparkHome/bin/spark-class", "org.apache.spark.DriverWithoutCleanup", master),
         new File(sparkHome),
         Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
-      failAfter(60 seconds) { process.waitFor() }
+      failAfter(60 seconds) {
+        process.waitFor()
+      }
       // Ensure we still kill the process in case it timed out
       process.destroy()
     }
@@ -46,9 +47,9 @@ class DriverSuite extends SparkFunSuite with TimeLimits {
 }
 
 /**
- * Program that creates a Spark driver but doesn't call SparkContext#stop() or
- * sys.exit() after finishing.
- */
+  * Program that creates a Spark driver but doesn't call SparkContext#stop() or
+  * sys.exit() after finishing.
+  */
 object DriverWithoutCleanup {
   def main(args: Array[String]) {
     TestUtils.configTestLog4j("INFO")

@@ -19,20 +19,20 @@ package org.apache.spark.status
 
 import java.util.{List => JList}
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
-import org.apache.spark.util.{Distribution, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
+import org.apache.spark.{JobExecutionStatus, SparkConf}
+
+import scala.collection.JavaConverters._
 
 /**
- * A wrapper around a KVStore that provides methods for accessing the API data stored within.
- */
+  * A wrapper around a KVStore that provides methods for accessing the API data stored within.
+  */
 private[spark] class AppStatusStore(
-    val store: KVStore,
-    val listener: Option[AppStatusListener] = None) {
+                                     val store: KVStore,
+                                     val listener: Option[AppStatusListener] = None) {
 
   def applicationInfo(): v1.ApplicationInfo = {
     store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
@@ -71,9 +71,9 @@ private[spark] class AppStatusStore(
   }
 
   /**
-   * This is used by ConsoleProgressBar to quickly fetch active stages for drawing the progress
-   * bar. It will only return anything useful when called from a live application.
-   */
+    * This is used by ConsoleProgressBar to quickly fetch active stages for drawing the progress
+    * bar. It will only return anything useful when called from a live application.
+    */
   def activeStages(): Seq[v1.StageData] = {
     listener.map(_.activeStages()).getOrElse(Nil)
   }
@@ -90,8 +90,8 @@ private[spark] class AppStatusStore(
   def stageData(stageId: Int, details: Boolean = false): Seq[v1.StageData] = {
     store.view(classOf[StageDataWrapper]).index("stageId").first(stageId).last(stageId)
       .asScala.map { s =>
-        if (details) stageWithDetails(s.info) else s.info
-      }.toSeq
+      if (details) stageWithDetails(s.info) else s.info
+    }.toSeq
   }
 
   def lastStageAttempt(stageId: Int): v1.StageData = {
@@ -118,6 +118,60 @@ private[spark] class AppStatusStore(
     if (details) stageWithDetails(stage) else stage
   }
 
+  private def stageWithDetails(stage: v1.StageData): v1.StageData = {
+    val tasks = taskList(stage.stageId, stage.attemptId, Int.MaxValue)
+      .map { t => (t.taskId, t) }
+      .toMap
+
+    new v1.StageData(
+      stage.status,
+      stage.stageId,
+      stage.attemptId,
+      stage.numTasks,
+      stage.numActiveTasks,
+      stage.numCompleteTasks,
+      stage.numFailedTasks,
+      stage.numKilledTasks,
+      stage.numCompletedIndices,
+      stage.executorRunTime,
+      stage.executorCpuTime,
+      stage.submissionTime,
+      stage.firstTaskLaunchedTime,
+      stage.completionTime,
+      stage.failureReason,
+      stage.inputBytes,
+      stage.inputRecords,
+      stage.outputBytes,
+      stage.outputRecords,
+      stage.shuffleReadBytes,
+      stage.shuffleReadRecords,
+      stage.shuffleWriteBytes,
+      stage.shuffleWriteRecords,
+      stage.memoryBytesSpilled,
+      stage.diskBytesSpilled,
+      stage.name,
+      stage.description,
+      stage.details,
+      stage.schedulingPool,
+      stage.rddIds,
+      stage.accumulatorUpdates,
+      Some(tasks),
+      Some(executorSummary(stage.stageId, stage.attemptId)),
+      stage.killedTasksSummary)
+  }
+
+  def taskList(stageId: Int, stageAttemptId: Int, maxTasks: Int): Seq[v1.TaskData] = {
+    val stageKey = Array(stageId, stageAttemptId)
+    store.view(classOf[TaskDataWrapper]).index("stage").first(stageKey).last(stageKey).reverse()
+      .max(maxTasks).asScala.map(_.toApi).toSeq.reverse
+  }
+
+  def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
+    val stageKey = Array(stageId, attemptId)
+    store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey).last(stageKey)
+      .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
+  }
+
   def taskCount(stageId: Int, stageAttemptId: Int): Long = {
     store.count(classOf[TaskDataWrapper], "stage", Array(stageId, stageAttemptId))
   }
@@ -127,17 +181,17 @@ private[spark] class AppStatusStore(
   }
 
   /**
-   * Calculates a summary of the task metrics for the given stage attempt, returning the
-   * requested quantiles for the recorded metrics.
-   *
-   * This method can be expensive if the requested quantiles are not cached; the method
-   * will only cache certain quantiles (every 0.05 step), so it's recommended to stick to
-   * those to avoid expensive scans of all task data.
-   */
+    * Calculates a summary of the task metrics for the given stage attempt, returning the
+    * requested quantiles for the recorded metrics.
+    *
+    * This method can be expensive if the requested quantiles are not cached; the method
+    * will only cache certain quantiles (every 0.05 step), so it's recommended to stick to
+    * those to avoid expensive scans of all task data.
+    */
   def taskSummary(
-      stageId: Int,
-      stageAttemptId: Int,
-      unsortedQuantiles: Array[Double]): Option[v1.TaskMetricDistributions] = {
+                   stageId: Int,
+                   stageAttemptId: Int,
+                   unsortedQuantiles: Array[Double]): Option[v1.TaskMetricDistributions] = {
     val stageKey = Array(stageId, stageAttemptId)
     val quantiles = unsortedQuantiles.sorted
 
@@ -339,25 +393,31 @@ private[spark] class AppStatusStore(
   }
 
   /**
-   * Whether to cache information about a specific metric quantile. We cache quantiles at every 0.05
-   * step, which covers the default values used both in the API and in the stages page.
-   */
+    * Whether to cache information about a specific metric quantile. We cache quantiles at every 0.05
+    * step, which covers the default values used both in the API and in the stages page.
+    */
   private def shouldCacheQuantile(q: Double): Boolean = (math.round(q * 100) % 5) == 0
 
   private def quantileToString(q: Double): String = math.round(q * 100).toString
 
-  def taskList(stageId: Int, stageAttemptId: Int, maxTasks: Int): Seq[v1.TaskData] = {
-    val stageKey = Array(stageId, stageAttemptId)
-    store.view(classOf[TaskDataWrapper]).index("stage").first(stageKey).last(stageKey).reverse()
-      .max(maxTasks).asScala.map(_.toApi).toSeq.reverse
+  /**
+    * Calls a closure that may throw a NoSuchElementException and returns `None` when the exception
+    * is thrown.
+    */
+  def asOption[T](fn: => T): Option[T] = {
+    try {
+      Some(fn)
+    } catch {
+      case _: NoSuchElementException => None
+    }
   }
 
   def taskList(
-      stageId: Int,
-      stageAttemptId: Int,
-      offset: Int,
-      length: Int,
-      sortBy: v1.TaskSorting): Seq[v1.TaskData] = {
+                stageId: Int,
+                stageAttemptId: Int,
+                offset: Int,
+                length: Int,
+                sortBy: v1.TaskSorting): Seq[v1.TaskData] = {
     val (indexName, ascending) = sortBy match {
       case v1.TaskSorting.ID =>
         (None, true)
@@ -370,12 +430,12 @@ private[spark] class AppStatusStore(
   }
 
   def taskList(
-      stageId: Int,
-      stageAttemptId: Int,
-      offset: Int,
-      length: Int,
-      sortBy: Option[String],
-      ascending: Boolean): Seq[v1.TaskData] = {
+                stageId: Int,
+                stageAttemptId: Int,
+                offset: Int,
+                length: Int,
+                sortBy: Option[String],
+                ascending: Boolean): Seq[v1.TaskData] = {
     val stageKey = Array(stageId, stageAttemptId)
     val base = store.view(classOf[TaskDataWrapper])
     val indexed = sortBy match {
@@ -391,70 +451,10 @@ private[spark] class AppStatusStore(
     ordered.skip(offset).max(length).asScala.map(_.toApi).toSeq
   }
 
-  def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
-    val stageKey = Array(stageId, attemptId)
-    store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey).last(stageKey)
-      .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
-  }
-
   def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {
     store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).filter { rdd =>
       !cachedOnly || rdd.numCachedPartitions > 0
     }.toSeq
-  }
-
-  /**
-   * Calls a closure that may throw a NoSuchElementException and returns `None` when the exception
-   * is thrown.
-   */
-  def asOption[T](fn: => T): Option[T] = {
-    try {
-      Some(fn)
-    } catch {
-      case _: NoSuchElementException => None
-    }
-  }
-
-  private def stageWithDetails(stage: v1.StageData): v1.StageData = {
-    val tasks = taskList(stage.stageId, stage.attemptId, Int.MaxValue)
-      .map { t => (t.taskId, t) }
-      .toMap
-
-    new v1.StageData(
-      stage.status,
-      stage.stageId,
-      stage.attemptId,
-      stage.numTasks,
-      stage.numActiveTasks,
-      stage.numCompleteTasks,
-      stage.numFailedTasks,
-      stage.numKilledTasks,
-      stage.numCompletedIndices,
-      stage.executorRunTime,
-      stage.executorCpuTime,
-      stage.submissionTime,
-      stage.firstTaskLaunchedTime,
-      stage.completionTime,
-      stage.failureReason,
-      stage.inputBytes,
-      stage.inputRecords,
-      stage.outputBytes,
-      stage.outputRecords,
-      stage.shuffleReadBytes,
-      stage.shuffleReadRecords,
-      stage.shuffleWriteBytes,
-      stage.shuffleWriteRecords,
-      stage.memoryBytesSpilled,
-      stage.diskBytesSpilled,
-      stage.name,
-      stage.description,
-      stage.details,
-      stage.schedulingPool,
-      stage.rddIds,
-      stage.accumulatorUpdates,
-      Some(tasks),
-      Some(executorSummary(stage.stageId, stage.attemptId)),
-      stage.killedTasksSummary)
   }
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {
@@ -501,8 +501,8 @@ private[spark] object AppStatusStore {
   val CURRENT_VERSION = 1L
 
   /**
-   * Create an in-memory store for a live application.
-   */
+    * Create an in-memory store for a live application.
+    */
   def createLiveStore(conf: SparkConf): AppStatusStore = {
     val store = new ElementTrackingStore(new InMemoryStore(), conf)
     val listener = new AppStatusListener(store, conf, true)

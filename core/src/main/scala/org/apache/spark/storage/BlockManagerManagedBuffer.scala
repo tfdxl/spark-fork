@@ -24,21 +24,21 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.spark.network.buffer.ManagedBuffer
 
 /**
- * This [[ManagedBuffer]] wraps a [[BlockData]] instance retrieved from the [[BlockManager]]
- * so that the corresponding block's read lock can be released once this buffer's references
- * are released.
- *
- * If `dispose` is set to true, the [[BlockData]]will be disposed when the buffer's reference
- * count drops to zero.
- *
- * This is effectively a wrapper / bridge to connect the BlockManager's notion of read locks
- * to the network layer's notion of retain / release counts.
- */
+  * This [[ManagedBuffer]] wraps a [[BlockData]] instance retrieved from the [[BlockManager]]
+  * so that the corresponding block's read lock can be released once this buffer's references
+  * are released.
+  *
+  * If `dispose` is set to true, the [[BlockData]]will be disposed when the buffer's reference
+  * count drops to zero.
+  *
+  * This is effectively a wrapper / bridge to connect the BlockManager's notion of read locks
+  * to the network layer's notion of retain / release counts.
+  */
 private[storage] class BlockManagerManagedBuffer(
-    blockInfoManager: BlockInfoManager,
-    blockId: BlockId,
-    data: BlockData,
-    dispose: Boolean) extends ManagedBuffer {
+                                                  blockInfoManager: BlockInfoManager,
+                                                  blockId: BlockId,
+                                                  data: BlockData,
+                                                  dispose: Boolean) extends ManagedBuffer {
 
   private val refCount = new AtomicInteger(1)
 
@@ -55,7 +55,7 @@ private[storage] class BlockManagerManagedBuffer(
     val locked = blockInfoManager.lockForReading(blockId, blocking = false)
     assert(locked.isDefined)
     this
- }
+  }
 
   override def release(): ManagedBuffer = {
     blockInfoManager.unlock(blockId)

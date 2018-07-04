@@ -20,17 +20,17 @@ package org.apache.spark.util
 import org.apache.spark.annotation.Since
 
 /**
- * A class for tracking the statistics of a set of numbers (count, mean and variance) in a
- * numerically robust way. Includes support for merging two StatCounters. Based on Welford
- * and Chan's <a href="http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance">
- * algorithms</a> for running variance.
- *
- * @constructor Initialize the StatCounter with the given values.
- */
+  * A class for tracking the statistics of a set of numbers (count, mean and variance) in a
+  * numerically robust way. Includes support for merging two StatCounters. Based on Welford
+  * and Chan's <a href="http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance">
+  * algorithms</a> for running variance.
+  *
+  * @constructor Initialize the StatCounter with the given values.
+  */
 class StatCounter(values: TraversableOnce[Double]) extends Serializable {
-  private var n: Long = 0     // Running count of our values
-  private var mu: Double = 0  // Running mean of our values
-  private var m2: Double = 0  // Running variance numerator (sum of (x - mean)^2)
+  private var n: Long = 0 // Running count of our values
+  private var mu: Double = 0 // Running mean of our values
+  private var m2: Double = 0 // Running variance numerator (sum of (x - mean)^2)
   private var maxValue: Double = Double.NegativeInfinity // Running max of our values
   private var minValue: Double = Double.PositiveInfinity // Running min of our values
 
@@ -38,6 +38,12 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
 
   /** Initialize the StatCounter with no values. */
   def this() = this(Nil)
+
+  /** Add multiple values into this StatCounter, updating the internal statistics. */
+  def merge(values: TraversableOnce[Double]): StatCounter = {
+    values.foreach(v => merge(v))
+    this
+  }
 
   /** Add a value into this StatCounter, updating the internal statistics. */
   def merge(value: Double): StatCounter = {
@@ -50,16 +56,10 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     this
   }
 
-  /** Add multiple values into this StatCounter, updating the internal statistics. */
-  def merge(values: TraversableOnce[Double]): StatCounter = {
-    values.foreach(v => merge(v))
-    this
-  }
-
   /** Merge another StatCounter into this one, adding up the internal statistics. */
   def merge(other: StatCounter): StatCounter = {
     if (other == this) {
-      merge(other.copy())  // Avoid overwriting fields in a weird order
+      merge(other.copy()) // Avoid overwriting fields in a weird order
     } else {
       if (n == 0) {
         mu = other.mu
@@ -96,22 +96,14 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     other
   }
 
-  def count: Long = n
-
-  def mean: Double = mu
-
   def sum: Double = n * mu
-
-  def max: Double = maxValue
-
-  def min: Double = minValue
 
   /** Return the population variance of the values. */
   def variance: Double = popVariance
 
   /**
-   * Return the population variance of the values.
-   */
+    * Return the population variance of the values.
+    */
   @Since("2.1.0")
   def popVariance: Double = {
     if (n == 0) {
@@ -122,9 +114,15 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   }
 
   /**
-   * Return the sample variance, which corrects for bias in estimating the variance by dividing
-   * by N-1 instead of N.
-   */
+    * Return the sample standard deviation of the values, which corrects for bias in estimating the
+    * variance by dividing by N-1 instead of N.
+    */
+  def sampleStdev: Double = math.sqrt(sampleVariance)
+
+  /**
+    * Return the sample variance, which corrects for bias in estimating the variance by dividing
+    * by N-1 instead of N.
+    */
   def sampleVariance: Double = {
     if (n <= 1) {
       Double.NaN
@@ -133,24 +131,26 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     }
   }
 
+  override def toString: String = {
+    "(count: %d, mean: %f, stdev: %f, max: %f, min: %f)".format(count, mean, stdev, max, min)
+  }
+
+  def count: Long = n
+
+  def mean: Double = mu
+
+  def max: Double = maxValue
+
+  def min: Double = minValue
+
   /** Return the population standard deviation of the values. */
   def stdev: Double = popStdev
 
   /**
-   * Return the population standard deviation of the values.
-   */
+    * Return the population standard deviation of the values.
+    */
   @Since("2.1.0")
   def popStdev: Double = math.sqrt(popVariance)
-
-  /**
-   * Return the sample standard deviation of the values, which corrects for bias in estimating the
-   * variance by dividing by N-1 instead of N.
-   */
-  def sampleStdev: Double = math.sqrt(sampleVariance)
-
-  override def toString: String = {
-    "(count: %d, mean: %f, stdev: %f, max: %f, min: %f)".format(count, mean, stdev, max, min)
-  }
 }
 
 object StatCounter {

@@ -22,19 +22,18 @@ import java.net.{MalformedURLException, URI}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
-import scala.concurrent.duration._
-
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
-import org.apache.spark.util.{ThreadUtils, Utils}
+import scala.concurrent.duration._
 
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
@@ -46,7 +45,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(conf)
     val envBefore = SparkEnv.get
     // A SparkContext is already running, so we shouldn't be able to create a second one
-    intercept[SparkException] { new SparkContext(conf) }
+    intercept[SparkException] {
+      new SparkContext(conf)
+    }
     val envAfter = SparkEnv.get
     // SparkEnv and other context variables should be the same
     assert(envBefore == envAfter)
@@ -92,7 +93,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
     // Try creating second context to confirm that it's still possible, if desired
     sc2 = new SparkContext(new SparkConf().setAppName("test3").setMaster("local")
-        .set("spark.driver.allowMultipleContexts", "true"))
+      .set("spark.driver.allowMultipleContexts", "true"))
 
     sc2.stop()
   }
@@ -215,11 +216,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           throw new SparkException("can't access file under root added directory")
         }
         if (!new File(SparkFiles.get(neptune.getName + sep + saturn.getName + sep + alien2.getName))
-            .exists()) {
+          .exists()) {
           throw new SparkException("can't access file in nested directory")
         }
         if (new File(SparkFiles.get(pluto.getName + sep + neptune.getName + sep + alien1.getName))
-            .exists()) {
+          .exists()) {
           throw new SparkException("file exists that shouldn't")
         }
         x
@@ -255,11 +256,13 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       Files.write("new", file2, StandardCharsets.UTF_8)
       sc = new SparkContext("local-cluster[1,1,1024]", "test")
       sc.addFile(file1.getAbsolutePath)
+
       def getAddedFileContents(): String = {
         sc.parallelize(Seq(0)).map { _ =>
           scala.io.Source.fromFile(SparkFiles.get("file")).mkString
         }.first()
       }
+
       assert(getAddedFileContents() === "old")
       intercept[IllegalArgumentException] {
         sc.addFile(file2.getAbsolutePath)
@@ -323,7 +326,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      val future = sc.parallelize(Seq(0)).foreachAsync(_ => {Thread.sleep(1000L)})
+      val future = sc.parallelize(Seq(0)).foreachAsync(_ => {
+        Thread.sleep(1000L)
+      })
       sc.cancelJobGroup("nonExistGroupId")
       ThreadUtils.awaitReady(future, Duration(2, TimeUnit.SECONDS))
 
@@ -382,9 +387,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       // Test textFile, hadoopFile, and newAPIHadoopFile for file3, file4, and file5
       assert(sc.textFile(filepath3 + "," + filepath4 + "," + filepath5).count() == 5L)
       assert(sc.hadoopFile(filepath3 + "," + filepath4 + "," + filepath5,
-               classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+        classOf[TextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
       assert(sc.newAPIHadoopFile(filepath3 + "," + filepath4 + "," + filepath5,
-               classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
+        classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text]).count() == 5L)
 
       // Test wholeTextFiles, and binaryFiles for dir1 and dir2
       assert(sc.wholeTextFiles(dirpath1 + "," + dirpath2).count() == 5L)
@@ -445,7 +450,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     sc.setLocalProperty("testProperty", "testValue")
     var result = "unset";
-    val thread = new Thread() { override def run() = {result = sc.getLocalProperty("testProperty")}}
+    val thread = new Thread() {
+      override def run() = {
+        result = sc.getLocalProperty("testProperty")
+      }
+    }
     thread.start()
     thread.join()
     sc.stop()
@@ -456,10 +465,16 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     var result = "unset";
     val thread1 = new Thread() {
-      override def run() = {sc.setLocalProperty("testProperty", "testValue")}}
+      override def run() = {
+        sc.setLocalProperty("testProperty", "testValue")
+      }
+    }
     // testProperty should be unset and thus return null
     val thread2 = new Thread() {
-      override def run() = {result = sc.getLocalProperty("testProperty")}}
+      override def run() = {
+        result = sc.getLocalProperty("testProperty")
+      }
+    }
     thread1.start()
     thread1.join()
     thread2.start()
@@ -485,8 +500,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("register and deregister Spark listener from SparkContext") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-    val sparkListener1 = new SparkListener { }
-    val sparkListener2 = new SparkListener { }
+    val sparkListener1 = new SparkListener {}
+    val sparkListener2 = new SparkListener {}
     sc.addSparkListener(sparkListener1)
     sc.addSparkListener(sparkListener2)
     assert(sc.listenerBus.listeners.contains(sparkListener1))
@@ -589,6 +604,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           sc.killTaskAttempt(taskStart.taskInfo.taskId, true, "first attempt will hang")
         }
       }
+
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         if (taskEnd.taskInfo.attemptNumber == 1 && taskEnd.reason == Success) {
           SparkContextSuite.taskSucceeded = true
@@ -630,8 +646,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 }
 
 object SparkContextSuite {
+  val semaphore = new Semaphore(0)
   @volatile var isTaskStarted = false
   @volatile var taskKilled = false
   @volatile var taskSucceeded = false
-  val semaphore = new Semaphore(0)
 }

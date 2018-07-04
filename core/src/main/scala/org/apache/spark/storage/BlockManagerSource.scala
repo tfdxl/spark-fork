@@ -18,11 +18,10 @@
 package org.apache.spark.storage
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
-
 import org.apache.spark.metrics.source.Source
 
 private[spark] class BlockManagerSource(val blockManager: BlockManager)
-    extends Source {
+  extends Source {
   override val metricRegistry = new MetricRegistry()
   override val sourceName = "BlockManager"
 

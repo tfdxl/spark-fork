@@ -20,23 +20,22 @@ import java.io.{InputStream, OutputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, WritableByteChannel}
 import java.util.Properties
-import javax.crypto.KeyGenerator
-import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
-
-import scala.collection.JavaConverters._
 
 import com.google.common.io.ByteStreams
+import javax.crypto.KeyGenerator
+import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import org.apache.commons.crypto.random._
 import org.apache.commons.crypto.stream._
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.{CryptoUtils, JavaUtils}
 
+import scala.collection.JavaConverters._
+
 /**
- * A util class for manipulating IO encryption and decryption streams.
- */
+  * A util class for manipulating IO encryption and decryption streams.
+  */
 private[spark] object CryptoStreamUtils extends Logging {
 
   // The initialization vector length in bytes.
@@ -45,12 +44,12 @@ private[spark] object CryptoStreamUtils extends Logging {
   val SPARK_IO_ENCRYPTION_COMMONS_CONFIG_PREFIX = "spark.io.encryption.commons.config."
 
   /**
-   * Helper method to wrap `OutputStream` with `CryptoOutputStream` for encryption.
-   */
+    * Helper method to wrap `OutputStream` with `CryptoOutputStream` for encryption.
+    */
   def createCryptoOutputStream(
-      os: OutputStream,
-      sparkConf: SparkConf,
-      key: Array[Byte]): OutputStream = {
+                                os: OutputStream,
+                                sparkConf: SparkConf,
+                                key: Array[Byte]): OutputStream = {
     val params = new CryptoParams(key, sparkConf)
     val iv = createInitializationVector(params.conf)
     os.write(iv)
@@ -59,12 +58,12 @@ private[spark] object CryptoStreamUtils extends Logging {
   }
 
   /**
-   * Wrap a `WritableByteChannel` for encryption.
-   */
+    * Wrap a `WritableByteChannel` for encryption.
+    */
   def createWritableChannel(
-      channel: WritableByteChannel,
-      sparkConf: SparkConf,
-      key: Array[Byte]): WritableByteChannel = {
+                             channel: WritableByteChannel,
+                             sparkConf: SparkConf,
+                             key: Array[Byte]): WritableByteChannel = {
     val params = new CryptoParams(key, sparkConf)
     val iv = createInitializationVector(params.conf)
     val helper = new CryptoHelperChannel(channel)
@@ -75,12 +74,28 @@ private[spark] object CryptoStreamUtils extends Logging {
   }
 
   /**
-   * Helper method to wrap `InputStream` with `CryptoInputStream` for decryption.
-   */
+    * This method to generate an IV (Initialization Vector) using secure random.
+    */
+  private[this] def createInitializationVector(properties: Properties): Array[Byte] = {
+    val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
+    val initialIVStart = System.currentTimeMillis()
+    CryptoRandomFactory.getCryptoRandom(properties).nextBytes(iv)
+    val initialIVFinish = System.currentTimeMillis()
+    val initialIVTime = initialIVFinish - initialIVStart
+    if (initialIVTime > 2000) {
+      logWarning(s"It costs ${initialIVTime} milliseconds to create the Initialization Vector " +
+        s"used by CryptoStream")
+    }
+    iv
+  }
+
+  /**
+    * Helper method to wrap `InputStream` with `CryptoInputStream` for decryption.
+    */
   def createCryptoInputStream(
-      is: InputStream,
-      sparkConf: SparkConf,
-      key: Array[Byte]): InputStream = {
+                               is: InputStream,
+                               sparkConf: SparkConf,
+                               key: Array[Byte]): InputStream = {
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
     ByteStreams.readFully(is, iv)
     val params = new CryptoParams(key, sparkConf)
@@ -89,12 +104,12 @@ private[spark] object CryptoStreamUtils extends Logging {
   }
 
   /**
-   * Wrap a `ReadableByteChannel` for decryption.
-   */
+    * Wrap a `ReadableByteChannel` for decryption.
+    */
   def createReadableChannel(
-      channel: ReadableByteChannel,
-      sparkConf: SparkConf,
-      key: Array[Byte]): ReadableByteChannel = {
+                             channel: ReadableByteChannel,
+                             sparkConf: SparkConf,
+                             key: Array[Byte]): ReadableByteChannel = {
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
     val buf = ByteBuffer.wrap(iv)
     JavaUtils.readFully(channel, buf)
@@ -110,8 +125,8 @@ private[spark] object CryptoStreamUtils extends Logging {
   }
 
   /**
-   * Creates a new encryption key.
-   */
+    * Creates a new encryption key.
+    */
   def createKey(conf: SparkConf): Array[Byte] = {
     val keyLen = conf.get(IO_ENCRYPTION_KEY_SIZE_BITS)
     val ioKeyGenAlgorithm = conf.get(IO_ENCRYPTION_KEYGEN_ALGORITHM)
@@ -121,26 +136,10 @@ private[spark] object CryptoStreamUtils extends Logging {
   }
 
   /**
-   * This method to generate an IV (Initialization Vector) using secure random.
-   */
-  private[this] def createInitializationVector(properties: Properties): Array[Byte] = {
-    val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
-    val initialIVStart = System.currentTimeMillis()
-    CryptoRandomFactory.getCryptoRandom(properties).nextBytes(iv)
-    val initialIVFinish = System.currentTimeMillis()
-    val initialIVTime = initialIVFinish - initialIVStart
-    if (initialIVTime > 2000) {
-      logWarning(s"It costs ${initialIVTime} milliseconds to create the Initialization Vector " +
-        s"used by CryptoStream")
-    }
-    iv
-  }
-
-  /**
-   * This class is a workaround for CRYPTO-125, that forces all bytes to be written to the
-   * underlying channel. Since the callers of this API are using blocking I/O, there are no
-   * concerns with regards to CPU usage here.
-   */
+    * This class is a workaround for CRYPTO-125, that forces all bytes to be written to the
+    * underlying channel. Since the callers of this API are using blocking I/O, there are no
+    * concerns with regards to CPU usage here.
+    */
   private class CryptoHelperChannel(sink: WritableByteChannel) extends WritableByteChannel {
 
     override def write(src: ByteBuffer): Int = {

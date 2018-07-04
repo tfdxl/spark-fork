@@ -18,16 +18,15 @@
 package org.apache.spark.internal
 
 import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
-import org.slf4j.{Logger, LoggerFactory}
-import org.slf4j.impl.StaticLoggerBinder
-
 import org.apache.spark.util.Utils
+import org.slf4j.impl.StaticLoggerBinder
+import org.slf4j.{Logger, LoggerFactory}
 
 /**
- * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
- * logging messages at different levels using methods that only evaluate parameters lazily if the
- * log level is enabled.
- */
+  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
+  * logging messages at different levels using methods that only evaluate parameters lazily if the
+  * log level is enabled.
+  */
 trait Logging {
 
   // Make the log field transient so that objects with Logging can
@@ -100,8 +99,8 @@ trait Logging {
   }
 
   protected def initializeLogIfNecessary(
-      isInterpreter: Boolean,
-      silent: Boolean = false): Boolean = {
+                                          isInterpreter: Boolean,
+                                          silent: Boolean = false): Boolean = {
     if (!Logging.initialized) {
       Logging.initLock.synchronized {
         if (!Logging.initialized) {
@@ -163,11 +162,10 @@ trait Logging {
 }
 
 private[spark] object Logging {
+  val initLock = new Object()
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
-
-  val initLock = new Object()
   try {
     // We use reflection here to handle the case where users remove the
     // slf4j-to-jul bridge order to route their logs to JUL.
@@ -182,10 +180,10 @@ private[spark] object Logging {
   }
 
   /**
-   * Marks the logging system as not initialized. This does a best effort at resetting the
-   * logging system to its initial state so that the next class to use logging triggers
-   * initialization again.
-   */
+    * Marks the logging system as not initialized. This does a best effort at resetting the
+    * logging system to its initial state so that the next class to use logging triggers
+    * initialization again.
+    */
   def uninitialize(): Unit = initLock.synchronized {
     if (isLog4j12()) {
       if (defaultSparkLog4jConfig) {

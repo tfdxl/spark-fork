@@ -17,9 +17,9 @@
 
 package org.apache.spark.rpc
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.scalactic.TripleEquals
+
+import scala.collection.mutable.ArrayBuffer
 
 class TestRpcEndpoint extends ThreadSafeRpcEndpoint with TripleEquals {
 
@@ -52,9 +52,9 @@ class TestRpcEndpoint extends ThreadSafeRpcEndpoint with TripleEquals {
   }
 
   /**
-   * Invoked when some network error happens in the connection between the current node and
-   * `remoteAddress`.
-   */
+    * Invoked when some network error happens in the connection between the current node and
+    * `remoteAddress`.
+    */
   override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
     onNetworkErrorMessages += cause -> remoteAddress
   }
@@ -81,20 +81,20 @@ class TestRpcEndpoint extends ThreadSafeRpcEndpoint with TripleEquals {
     assert(stopped, "RpcEndpoint is not stopped")
   }
 
-  def verifyReceiveMessages(expected: Seq[Any]): Unit = {
-    assert(receiveMessages === expected)
-  }
-
   def verifySingleReceiveMessage(message: Any): Unit = {
     verifyReceiveMessages(List(message))
   }
 
-  def verifyReceiveAndReplyMessages(expected: Seq[Any]): Unit = {
-    assert(receiveAndReplyMessages === expected)
+  def verifyReceiveMessages(expected: Seq[Any]): Unit = {
+    assert(receiveMessages === expected)
   }
 
   def verifySingleReceiveAndReplyMessage(message: Any): Unit = {
     verifyReceiveAndReplyMessages(List(message))
+  }
+
+  def verifyReceiveAndReplyMessages(expected: Seq[Any]): Unit = {
+    assert(receiveAndReplyMessages === expected)
   }
 
   def verifySingleOnConnectedMessage(remoteAddress: RpcAddress): Unit = {

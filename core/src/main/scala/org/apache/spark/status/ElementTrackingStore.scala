@@ -19,30 +19,29 @@ package org.apache.spark.status
 
 import java.util.concurrent.TimeUnit
 
+import com.google.common.util.concurrent.MoreExecutors
+import org.apache.spark.SparkConf
+import org.apache.spark.util.kvstore._
+import org.apache.spark.util.{ThreadUtils, Utils}
+
 import scala.collection.mutable.{HashMap, ListBuffer}
 
-import com.google.common.util.concurrent.MoreExecutors
-
-import org.apache.spark.SparkConf
-import org.apache.spark.util.{ThreadUtils, Utils}
-import org.apache.spark.util.kvstore._
-
 /**
- * A KVStore wrapper that allows tracking the number of elements of specific types, and triggering
- * actions once they reach a threshold. This allows writers, for example, to control how much data
- * is stored by potentially deleting old data as new data is added.
- *
- * This store is used when populating data either from a live UI or an event log. On top of firing
- * triggers when elements reach a certain threshold, it provides two extra bits of functionality:
- *
- * - a generic worker thread that can be used to run expensive tasks asynchronously; the tasks can
- *   be configured to run on the calling thread when more determinism is desired (e.g. unit tests).
- * - a generic flush mechanism so that listeners can be notified about when they should flush
- *   internal state to the store (e.g. after the SHS finishes parsing an event log).
- *
- * The configured triggers are run on a separate thread by default; they can be forced to run on
- * the calling thread by setting the `ASYNC_TRACKING_ENABLED` configuration to `false`.
- */
+  * A KVStore wrapper that allows tracking the number of elements of specific types, and triggering
+  * actions once they reach a threshold. This allows writers, for example, to control how much data
+  * is stored by potentially deleting old data as new data is added.
+  *
+  * This store is used when populating data either from a live UI or an event log. On top of firing
+  * triggers when elements reach a certain threshold, it provides two extra bits of functionality:
+  *
+  * - a generic worker thread that can be used to run expensive tasks asynchronously; the tasks can
+  * be configured to run on the calling thread when more determinism is desired (e.g. unit tests).
+  * - a generic flush mechanism so that listeners can be notified about when they should flush
+  * internal state to the store (e.g. after the SHS finishes parsing an event log).
+  *
+  * The configured triggers are run on a separate thread by default; they can be forced to run on
+  * the calling thread by setting the `ASYNC_TRACKING_ENABLED` configuration to `false`.
+  */
 private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) extends KVStore {
 
   import config._
@@ -58,43 +57,31 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
   @volatile private var stopped = false
 
   /**
-   * Register a trigger that will be fired once the number of elements of a given type reaches
-   * the given threshold.
-   *
-   * @param klass The type to monitor.
-   * @param threshold The number of elements that should trigger the action.
-   * @param action Action to run when the threshold is reached; takes as a parameter the number
-   *               of elements of the registered type currently known to be in the store.
-   */
+    * Register a trigger that will be fired once the number of elements of a given type reaches
+    * the given threshold.
+    *
+    * @param klass     The type to monitor.
+    * @param threshold The number of elements that should trigger the action.
+    * @param action    Action to run when the threshold is reached; takes as a parameter the number
+    *                  of elements of the registered type currently known to be in the store.
+    */
   def addTrigger(klass: Class[_], threshold: Long)(action: Long => Unit): Unit = {
     val existing = triggers.getOrElse(klass, Seq())
     triggers(klass) = existing :+ Trigger(threshold, action)
   }
 
   /**
-   * Adds a trigger to be executed before the store is flushed. This normally happens before
-   * closing, and is useful for flushing intermediate state to the store, e.g. when replaying
-   * in-progress applications through the SHS.
-   *
-   * Flush triggers are called synchronously in the same thread that is closing the store.
-   */
+    * Adds a trigger to be executed before the store is flushed. This normally happens before
+    * closing, and is useful for flushing intermediate state to the store, e.g. when replaying
+    * in-progress applications through the SHS.
+    *
+    * Flush triggers are called synchronously in the same thread that is closing the store.
+    */
   def onFlush(action: => Unit): Unit = {
     flushTriggers += { () => action }
   }
 
-  /**
-   * Enqueues an action to be executed asynchronously. The task will run on the calling thread if
-   * `ASYNC_TRACKING_ENABLED` is `false`.
-   */
-  def doAsync(fn: => Unit): Unit = {
-    executor.submit(new Runnable() {
-      override def run(): Unit = Utils.tryLog { fn }
-    })
-  }
-
   override def read[T](klass: Class[T], naturalKey: Any): T = store.read(klass, naturalKey)
-
-  override def write(value: Any): Unit = store.write(value)
 
   /** Write an element to the store, optionally checking for whether to fire triggers. */
   def write(value: Any, checkTriggers: Boolean): Unit = {
@@ -113,6 +100,20 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
       }
     }
   }
+
+  /**
+    * Enqueues an action to be executed asynchronously. The task will run on the calling thread if
+    * `ASYNC_TRACKING_ENABLED` is `false`.
+    */
+  def doAsync(fn: => Unit): Unit = {
+    executor.submit(new Runnable() {
+      override def run(): Unit = Utils.tryLog {
+        fn
+      }
+    })
+  }
+
+  override def write(value: Any): Unit = store.write(value)
 
   override def delete(klass: Class[_], naturalKey: Any): Unit = store.delete(klass, naturalKey)
 
@@ -154,7 +155,7 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
   }
 
   private case class Trigger[T](
-      threshold: Long,
-      action: Long => Unit)
+                                 threshold: Long,
+                                 action: Long => Unit)
 
 }

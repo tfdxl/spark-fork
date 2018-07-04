@@ -17,12 +17,11 @@
 
 package org.apache.spark
 
-import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
+import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
+import org.scalatest.PrivateMethodTester
 
 
 class SparkContextSchedulerCreationSuite
@@ -35,9 +34,9 @@ class SparkContextSchedulerCreationSuite
     createTaskScheduler(master, deployMode, new SparkConf())
 
   def createTaskScheduler(
-      master: String,
-      deployMode: String,
-      conf: SparkConf): TaskSchedulerImpl = {
+                           master: String,
+                           deployMode: String,
+                           conf: SparkConf): TaskSchedulerImpl = {
     // Create local SparkContext to setup a SparkEnv. We don't actually want to start() the
     // real schedulers, so we don't want to create a full SparkContext with the desired scheduler.
     sc = new SparkContext("local", "test", conf)

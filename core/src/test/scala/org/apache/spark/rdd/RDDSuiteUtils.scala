@@ -18,6 +18,7 @@
 package org.apache.spark.rdd
 
 object RDDSuiteUtils {
+
   case class Person(first: String, last: String, age: Int)
 
   object AgeOrdering extends Ordering[Person] {
@@ -28,4 +29,5 @@ object RDDSuiteUtils {
     def compare(a: Person, b: Person): Int =
       implicitly[Ordering[Tuple2[String, String]]].compare((a.last, a.first), (b.last, b.first))
   }
+
 }

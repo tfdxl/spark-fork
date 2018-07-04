@@ -18,41 +18,41 @@
 package org.apache.spark.memory;
 
 import com.google.common.annotations.VisibleForTesting;
-
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 import java.io.IOException;
 
 public class TestMemoryConsumer extends MemoryConsumer {
-  public TestMemoryConsumer(TaskMemoryManager memoryManager, MemoryMode mode) {
-    super(memoryManager, 1024L, mode);
-  }
-  public TestMemoryConsumer(TaskMemoryManager memoryManager) {
-    this(memoryManager, MemoryMode.ON_HEAP);
-  }
+    public TestMemoryConsumer(TaskMemoryManager memoryManager, MemoryMode mode) {
+        super(memoryManager, 1024L, mode);
+    }
 
-  @Override
-  public long spill(long size, MemoryConsumer trigger) throws IOException {
-    long used = getUsed();
-    free(used);
-    return used;
-  }
+    public TestMemoryConsumer(TaskMemoryManager memoryManager) {
+        this(memoryManager, MemoryMode.ON_HEAP);
+    }
 
-  void use(long size) {
-    long got = taskMemoryManager.acquireExecutionMemory(size, this);
-    used += got;
-  }
+    @Override
+    public long spill(long size, MemoryConsumer trigger) throws IOException {
+        long used = getUsed();
+        free(used);
+        return used;
+    }
 
-  void free(long size) {
-    used -= size;
-    taskMemoryManager.releaseExecutionMemory(size, this);
-  }
+    void use(long size) {
+        long got = taskMemoryManager.acquireExecutionMemory(size, this);
+        used += got;
+    }
 
-  @VisibleForTesting
-  public void freePage(MemoryBlock page) {
-    used -= page.size();
-    taskMemoryManager.freePage(page, this);
-  }
+    void free(long size) {
+        used -= size;
+        taskMemoryManager.releaseExecutionMemory(size, this);
+    }
+
+    @VisibleForTesting
+    public void freePage(MemoryBlock page) {
+        used -= page.size();
+        taskMemoryManager.freePage(page, this);
+    }
 }
 
 

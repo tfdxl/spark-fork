@@ -19,36 +19,36 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.concurrent.{Future, Promise}
-
 import org.apache.spark.internal.Logging
 
+import scala.concurrent.{Future, Promise}
+
 /**
- * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their
- * results to the given handler function.
- */
+  * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their
+  * results to the given handler function.
+  */
 private[spark] class JobWaiter[T](
-    dagScheduler: DAGScheduler,
-    val jobId: Int,
-    totalTasks: Int,
-    resultHandler: (Int, T) => Unit)
+                                   dagScheduler: DAGScheduler,
+                                   val jobId: Int,
+                                   totalTasks: Int,
+                                   resultHandler: (Int, T) => Unit)
   extends JobListener with Logging {
 
   private val finishedTasks = new AtomicInteger(0)
   // If the job is finished, this will be its result. In the case of 0 task jobs (e.g. zero
   // partition RDDs), we set the jobResult directly to JobSucceeded.
   private val jobPromise: Promise[Unit] =
-    if (totalTasks == 0) Promise.successful(()) else Promise()
+  if (totalTasks == 0) Promise.successful(()) else Promise()
 
   def jobFinished: Boolean = jobPromise.isCompleted
 
   def completionFuture: Future[Unit] = jobPromise.future
 
   /**
-   * Sends a signal to the DAGScheduler to cancel the job. The cancellation itself is handled
-   * asynchronously. After the low level scheduler cancels all the tasks belonging to this job, it
-   * will fail this job with a SparkException.
-   */
+    * Sends a signal to the DAGScheduler to cancel the job. The cancellation itself is handled
+    * asynchronously. After the low level scheduler cancels all the tasks belonging to this job, it
+    * will fail this job with a SparkException.
+    */
   def cancel() {
     dagScheduler.cancelJob(jobId, None)
   }

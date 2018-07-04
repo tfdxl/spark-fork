@@ -20,7 +20,6 @@ package org.apache.spark.io
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import com.google.common.io.ByteStreams
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class CompressionCodecSuite extends SparkFunSuite {

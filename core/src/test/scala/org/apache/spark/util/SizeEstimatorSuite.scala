@@ -17,11 +17,10 @@
 
 package org.apache.spark.util
 
-import scala.collection.mutable.ArrayBuffer
-
+import org.apache.spark.SparkFunSuite
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
-import org.apache.spark.SparkFunSuite
+import scala.collection.mutable.ArrayBuffer
 
 class DummyClass1 {}
 
@@ -52,8 +51,9 @@ class DummyClass7 {
 }
 
 object DummyString {
-  def apply(str: String) : DummyString = new DummyString(str.toArray)
+  def apply(str: String): DummyString = new DummyString(str.toArray)
 }
+
 class DummyString(val arr: Array[Char]) {
   override val hashCode: Int = 0
   // JDK-7 has an extra hash32 field http://hg.openjdk.java.net/jdk7u/jdk7u6/jdk/rev/11987e85555f
@@ -68,9 +68,9 @@ class DummyClass8 extends KnownSizeEstimation {
 
 class SizeEstimatorSuite
   extends SparkFunSuite
-  with BeforeAndAfterEach
-  with PrivateMethodTester
-  with ResetSystemProperties {
+    with BeforeAndAfterEach
+    with PrivateMethodTester
+    with ResetSystemProperties {
 
   override def beforeEach() {
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case

@@ -17,46 +17,45 @@
 
 package test.org.apache.spark;
 
-import java.io.*;
-
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.junit.Test;
 import scala.collection.immutable.List;
 import scala.collection.immutable.List$;
 import scala.collection.immutable.Map;
 import scala.collection.immutable.Map$;
 
-import org.junit.Test;
-
-import org.apache.spark.api.java.*;
-import org.apache.spark.*;
+import java.io.Serializable;
 
 /**
  * Java apps can uses both Java-friendly JavaSparkContext and Scala SparkContext.
  */
 public class JavaSparkContextSuite implements Serializable {
 
-  @Test
-  public void javaSparkContext() {
-    String[] jars = new String[] {};
-    java.util.Map<String, String> environment = new java.util.HashMap<>();
+    @Test
+    public void javaSparkContext() {
+        String[] jars = new String[]{};
+        java.util.Map<String, String> environment = new java.util.HashMap<>();
 
-    new JavaSparkContext(new SparkConf().setMaster("local").setAppName("name")).stop();
-    new JavaSparkContext("local", "name", new SparkConf()).stop();
-    new JavaSparkContext("local", "name").stop();
-    new JavaSparkContext("local", "name", "sparkHome", "jarFile").stop();
-    new JavaSparkContext("local", "name", "sparkHome", jars).stop();
-    new JavaSparkContext("local", "name", "sparkHome", jars, environment).stop();
-  }
+        new JavaSparkContext(new SparkConf().setMaster("local").setAppName("name")).stop();
+        new JavaSparkContext("local", "name", new SparkConf()).stop();
+        new JavaSparkContext("local", "name").stop();
+        new JavaSparkContext("local", "name", "sparkHome", "jarFile").stop();
+        new JavaSparkContext("local", "name", "sparkHome", jars).stop();
+        new JavaSparkContext("local", "name", "sparkHome", jars, environment).stop();
+    }
 
-  @Test
-  public void scalaSparkContext() {
-    List<String> jars = List$.MODULE$.empty();
-    Map<String, String> environment = Map$.MODULE$.empty();
+    @Test
+    public void scalaSparkContext() {
+        List<String> jars = List$.MODULE$.empty();
+        Map<String, String> environment = Map$.MODULE$.empty();
 
-    new SparkContext(new SparkConf().setMaster("local").setAppName("name")).stop();
-    new SparkContext("local", "name", new SparkConf()).stop();
-    new SparkContext("local", "name").stop();
-    new SparkContext("local", "name", "sparkHome").stop();
-    new SparkContext("local", "name", "sparkHome", jars).stop();
-    new SparkContext("local", "name", "sparkHome", jars, environment).stop();
-  }
+        new SparkContext(new SparkConf().setMaster("local").setAppName("name")).stop();
+        new SparkContext("local", "name", new SparkConf()).stop();
+        new SparkContext("local", "name").stop();
+        new SparkContext("local", "name", "sparkHome").stop();
+        new SparkContext("local", "name", "sparkHome", jars).stop();
+        new SparkContext("local", "name", "sparkHome", jars, environment).stop();
+    }
 }

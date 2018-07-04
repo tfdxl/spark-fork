@@ -17,19 +17,15 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, PrintStream}
+import java.io._
 import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
-import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
+import java.nio.{ByteBuffer, ByteOrder}
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPOutputStream
-
-import scala.collection.mutable.ListBuffer
-import scala.util.Random
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
@@ -37,11 +33,13 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
+
+import scala.collection.mutable.ListBuffer
+import scala.util.Random
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
@@ -267,6 +265,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val second = 1000
     val minute = second * 60
     val hour = minute * 60
+
     def str: (Long) => String = Utils.msDurationToString(_)
 
     val sep = new DecimalFormatSymbols(Locale.US).getDecimalSeparator
@@ -279,25 +278,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(str(minute + 4 * second + 34) === "1" + sep + "1 m")
     assert(str(10 * hour + minute + 4 * second) === "10" + sep + "02 h")
     assert(str(10 * hour + 59 * minute + 59 * second + 999) === "11" + sep + "00 h")
-  }
-
-  def getSuffix(isCompressed: Boolean): String = {
-    if (isCompressed) {
-      ".gz"
-    } else {
-      ""
-    }
-  }
-
-  def writeLogFile(path: String, content: Array[Byte]): Unit = {
-    val outputStream = if (path.endsWith(".gz")) {
-      new GZIPOutputStream(new FileOutputStream(path))
-    } else {
-      new FileOutputStream(path)
-    }
-    IOUtils.write(content, outputStream)
-    outputStream.close()
-    content.size
   }
 
   private val workerConf = new SparkConf()
@@ -328,14 +308,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.offsetBytes(f1Path, f1Length, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
 
     Utils.deleteRecursively(tmpDir2)
-  }
-
-  test("reading offset bytes of a file") {
-    testOffsetBytes(isCompressed = false)
-  }
-
-  test("reading offset bytes of a file (compressed)") {
-    testOffsetBytes(isCompressed = true)
   }
 
   def testOffsetBytesMultipleFiles(isCompressed: Boolean): Unit = {
@@ -376,6 +348,33 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     Utils.deleteRecursively(tmpDir)
   }
 
+  def getSuffix(isCompressed: Boolean): String = {
+    if (isCompressed) {
+      ".gz"
+    } else {
+      ""
+    }
+  }
+
+  test("reading offset bytes of a file") {
+    testOffsetBytes(isCompressed = false)
+  }
+
+  test("reading offset bytes of a file (compressed)") {
+    testOffsetBytes(isCompressed = true)
+  }
+
+  def writeLogFile(path: String, content: Array[Byte]): Unit = {
+    val outputStream = if (path.endsWith(".gz")) {
+      new GZIPOutputStream(new FileOutputStream(path))
+    } else {
+      new FileOutputStream(path)
+    }
+    IOUtils.write(content, outputStream)
+    outputStream.close()
+    content.size
+  }
+
   test("reading offset bytes across multiple files") {
     testOffsetBytesMultipleFiles(isCompressed = false)
   }
@@ -385,7 +384,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("deserialize long value") {
-    val testval : Long = 9730889947L
+    val testval: Long = 9730889947L
     val bbuf = ByteBuffer.allocate(8)
     assert(bbuf.hasArray)
     bbuf.order(ByteOrder.BIG_ENDIAN)
@@ -462,13 +461,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     def assertResolves(before: String, after: String): Unit = {
       // This should test only single paths
       assert(before.split(",").length === 1)
+
       def resolve(uri: String): String = Utils.resolveURI(uri).toString
+
       assert(resolve(before) === after)
       assert(resolve(after) === after)
       // Repeated invocations of resolveURI should yield the same result
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
     }
+
     val rawCwd = System.getProperty("user.dir")
     val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
@@ -490,12 +492,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("resolveURIs with multiple paths") {
     def assertResolves(before: String, after: String): Unit = {
       def resolve(uri: String): String = Utils.resolveURIs(uri)
+
       assert(resolve(before) === after)
       assert(resolve(after) === after)
       // Repeated invocations of resolveURIs should yield the same result
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
     }
+
     val rawCwd = System.getProperty("user.dir")
     val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
@@ -504,7 +508,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
       s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5,file:$cwd/path%20to/jar6")
     if (Utils.isWindows) {
-      assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
+      assertResolves(
+        """hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
         s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
     }
     assertResolves(",jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
@@ -624,8 +629,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         "spark.test.fileNameLoadB 1\n", outFile, StandardCharsets.UTF_8)
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
-        .filter { case (k, v) => k.startsWith("spark.")}
-        .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v)}
+        .filter { case (k, v) => k.startsWith("spark.") }
+        .foreach { case (k, v) => sys.props.getOrElseUpdate(k, v) }
       val sparkConf = new SparkConf
       assert(sparkConf.getBoolean("spark.test.fileNameLoadA", false) === true)
       assert(sparkConf.getInt("spark.test.fileNameLoadB", 1) === 2)
@@ -689,7 +694,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val testFileName = "testFName"
     val testFilefs = Utils.getHadoopFileSystem(filePath.toString, conf)
     Utils.fetchHcfsFile(filePath, testFileDir, testFilefs, new SparkConf(),
-                        conf, false, Some(testFileName))
+      conf, false, Some(testFileName))
     val newFileName = new File(testFileDir, testFileName)
     assert(newFileName.isFile())
   }
@@ -811,6 +816,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assert(Utils.nanSafeCompareDoubles(a, b) === JDouble.compare(a, b))
       assert(Utils.nanSafeCompareDoubles(b, a) === JDouble.compare(b, a))
     }
+
     shouldMatchDefaultOrder(0d, 0d)
     shouldMatchDefaultOrder(0d, 1d)
     shouldMatchDefaultOrder(Double.MinValue, Double.MaxValue)
@@ -826,6 +832,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assert(Utils.nanSafeCompareFloats(a, b) === JFloat.compare(a, b))
       assert(Utils.nanSafeCompareFloats(b, a) === JFloat.compare(b, a))
     }
+
     shouldMatchDefaultOrder(0f, 0f)
     shouldMatchDefaultOrder(1f, 1f)
     shouldMatchDefaultOrder(Float.MinValue, Float.MaxValue)
@@ -1033,7 +1040,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     var isErrorOccurred = false
     // if the try and finally blocks throw different exception instances
     try {
-      Utils.tryWithSafeFinally { throw e }(finallyBlock = { throw finallyBlockError })
+      Utils.tryWithSafeFinally {
+        throw e
+      }(finallyBlock = {
+        throw finallyBlockError
+      })
     } catch {
       case t: Error =>
         assert(t.getSuppressed.head == finallyBlockError)
@@ -1045,7 +1056,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     e = new Error("Block1")
     isErrorOccurred = false
     try {
-      Utils.tryWithSafeFinally { throw e }(finallyBlock = { throw e })
+      Utils.tryWithSafeFinally {
+        throw e
+      }(finallyBlock = {
+        throw e
+      })
     } catch {
       case t: Error =>
         assert(t.getSuppressed.length == 0)
@@ -1056,7 +1071,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     e = new Error("Block2")
     isErrorOccurred = false
     try {
-      Utils.tryWithSafeFinally { throw e }(finallyBlock = {})
+      Utils.tryWithSafeFinally {
+        throw e
+      }(finallyBlock = {})
     } catch {
       case t: Error =>
         assert(t.getSuppressed.length == 0)
@@ -1075,8 +1092,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     TaskContext.setTaskContext(TaskContext.empty())
     // if the try, catch and finally blocks throw different exception instances
     try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(
-        catchBlock = { throw catchBlockError }, finallyBlock = { throw finallyBlockError })
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
+        throw e
+      }(
+        catchBlock = {
+          throw catchBlockError
+        }, finallyBlock = {
+          throw finallyBlockError
+        })
     } catch {
       case t: Error =>
         assert(t.getSuppressed.head == catchBlockError)
@@ -1089,8 +1112,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     e = new Error("Block1")
     isErrorOccurred = false
     try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock = { throw e },
-        finallyBlock = { throw e })
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
+        throw e
+      }(catchBlock = {
+        throw e
+      },
+        finallyBlock = {
+          throw e
+        })
     } catch {
       case t: Error =>
         assert(t.getSuppressed.length == 0)
@@ -1101,7 +1130,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     e = new Error("Block2")
     isErrorOccurred = false
     try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock = {}, finallyBlock = {})
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
+        throw e
+      }(catchBlock = {}, finallyBlock = {})
     } catch {
       case t: Error =>
         assert(t.getSuppressed.length == 0)
@@ -1129,7 +1160,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       .get
     assert(extWithConf.conf eq conf)
 
-    class NestedExtension { }
+    class NestedExtension {}
 
     val invalid = Seq(classOf[NestedExtension].getName())
     intercept[SparkException] {
@@ -1170,7 +1201,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   object MalformedClassObject {
+
     class MalformedClass
+
   }
 
   test("Safe getSimpleName") {

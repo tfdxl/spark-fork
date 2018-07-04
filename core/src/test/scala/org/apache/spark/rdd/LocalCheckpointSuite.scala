@@ -17,18 +17,17 @@
 
 package org.apache.spark.rdd
 
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, SparkFunSuite}
+import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
+
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
-
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, SparkFunSuite}
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
-
 /**
- * Fine-grained tests for local checkpointing.
- * For end-to-end tests, see CheckpointSuite.
- */
+  * Fine-grained tests for local checkpointing.
+  * For end-to-end tests, see CheckpointSuite.
+  */
 class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeEach(): Unit = {
@@ -189,8 +188,13 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   /**
-   * Helper method to create a simple RDD.
-   */
+    * Helper method to create a simple sorted RDD.
+    */
+  private def newSortedRdd: RDD[Int] = newRdd.sortBy(identity)
+
+  /**
+    * Helper method to create a simple RDD.
+    */
   private def newRdd: RDD[Int] = {
     sc.parallelize(1 to 100, 4)
       .map { i => i + 1 }
@@ -198,18 +202,13 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   /**
-   * Helper method to create a simple sorted RDD.
-   */
-  private def newSortedRdd: RDD[Int] = newRdd.sortBy(identity)
-
-  /**
-   * Helper method to test basic lineage truncation with caching.
-   *
-   * @param rdd an RDD that is both marked for caching and local checkpointing
-   */
+    * Helper method to test basic lineage truncation with caching.
+    *
+    * @param rdd an RDD that is both marked for caching and local checkpointing
+    */
   private def testBasicLineageTruncationWithCaching[T](
-      rdd: RDD[T],
-      targetStorageLevel: StorageLevel): Unit = {
+                                                        rdd: RDD[T],
+                                                        targetStorageLevel: StorageLevel): Unit = {
     require(targetStorageLevel !== StorageLevel.NONE)
     require(rdd.getStorageLevel !== StorageLevel.NONE)
     require(rdd.isLocallyCheckpointed)
@@ -224,16 +223,16 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   /**
-   * Helper method to test indirect lineage truncation.
-   *
-   * Indirect lineage truncation here means the action is called on one of the
-   * checkpointed RDD's descendants, but not on the checkpointed RDD itself.
-   *
-   * @param rdd a locally checkpointed RDD
-   */
+    * Helper method to test indirect lineage truncation.
+    *
+    * Indirect lineage truncation here means the action is called on one of the
+    * checkpointed RDD's descendants, but not on the checkpointed RDD itself.
+    *
+    * @param rdd a locally checkpointed RDD
+    */
   private def testIndirectLineageTruncation[T](
-      rdd: RDD[T],
-      targetStorageLevel: StorageLevel): Unit = {
+                                                rdd: RDD[T],
+                                                targetStorageLevel: StorageLevel): Unit = {
     require(targetStorageLevel !== StorageLevel.NONE)
     require(rdd.isLocallyCheckpointed)
     val rdd1 = rdd.map { i => i + "1" }
@@ -267,18 +266,18 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   /**
-   * Helper method to test checkpointing without fully draining the iterator.
-   *
-   * Not all RDD actions fully consume the iterator. As a result, a subset of the partitions
-   * may not be cached. However, since we want to truncate the lineage safely, we explicitly
-   * ensure that *all* partitions are fully cached. This method asserts this behavior.
-   *
-   * @param rdd a locally checkpointed RDD
-   */
+    * Helper method to test checkpointing without fully draining the iterator.
+    *
+    * Not all RDD actions fully consume the iterator. As a result, a subset of the partitions
+    * may not be cached. However, since we want to truncate the lineage safely, we explicitly
+    * ensure that *all* partitions are fully cached. This method asserts this behavior.
+    *
+    * @param rdd a locally checkpointed RDD
+    */
   private def testWithoutDrainingIterator[T](
-      rdd: RDD[T],
-      targetStorageLevel: StorageLevel,
-      targetCount: Int): Unit = {
+                                              rdd: RDD[T],
+                                              targetStorageLevel: StorageLevel,
+                                              targetCount: Int): Unit = {
     require(targetCount > 0)
     require(targetStorageLevel !== StorageLevel.NONE)
     require(rdd.isLocallyCheckpointed)
@@ -306,13 +305,13 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   /**
-   * Helper method to test whether the checkpoint blocks are found in the cache.
-   *
-   * @param rdd a locally checkpointed RDD
-   */
+    * Helper method to test whether the checkpoint blocks are found in the cache.
+    *
+    * @param rdd a locally checkpointed RDD
+    */
   private def testCheckpointBlocksExist[T](
-      rdd: RDD[T],
-      targetStorageLevel: StorageLevel): Unit = {
+                                            rdd: RDD[T],
+                                            targetStorageLevel: StorageLevel): Unit = {
     val bmm = sc.env.blockManager.master
     val partitionIndices = rdd.partitions.map(_.index)
 

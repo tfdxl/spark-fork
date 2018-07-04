@@ -21,15 +21,15 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 
 /**
- * Provide a zero-copy way to convert data in ByteArrayOutputStream to ByteBuffer
- */
+  * Provide a zero-copy way to convert data in ByteArrayOutputStream to ByteBuffer
+  */
 private[spark] class ByteBufferOutputStream(capacity: Int) extends ByteArrayOutputStream(capacity) {
+
+  private[this] var closed: Boolean = false
 
   def this() = this(32)
 
   def getCount(): Int = count
-
-  private[this] var closed: Boolean = false
 
   override def write(b: Int): Unit = {
     require(!closed, "cannot write to a closed ByteBufferOutputStream")

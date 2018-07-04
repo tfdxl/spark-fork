@@ -22,25 +22,24 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
+import com.google.common.io.Files
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, SparkFunSuite}
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{mock, never, verify, when}
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually._
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import com.google.common.io.Files
-import org.mockito.Matchers.any
-import org.mockito.Mockito.{mock, never, verify, when}
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.concurrent.Eventually._
-
-import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, SparkFunSuite}
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.{ThreadUtils, Utils}
-
 /**
- * Common tests for an RpcEnv implementation.
- */
+  * Common tests for an RpcEnv implementation.
+  */
 abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   var env: RpcEnv = _
@@ -486,13 +485,13 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   /**
-   * Setup an [[RpcEndpoint]] to collect all network events.
-   *
-   * @return the [[RpcEndpointRef]] and a `ConcurrentLinkedQueue` that contains network events.
-   */
+    * Setup an [[RpcEndpoint]] to collect all network events.
+    *
+    * @return the [[RpcEndpointRef]] and a `ConcurrentLinkedQueue` that contains network events.
+    */
   private def setupNetworkEndpoint(
-      _env: RpcEnv,
-      name: String): (RpcEndpointRef, ConcurrentLinkedQueue[(Any, Any)]) = {
+                                    _env: RpcEnv,
+                                    name: String): (RpcEndpointRef, ConcurrentLinkedQueue[(Any, Any)]) = {
     val events = new ConcurrentLinkedQueue[(Any, Any)]
     val ref = _env.setupEndpoint("network-events-non-client", new ThreadSafeRpcEndpoint {
       override val rpcEnv = _env
@@ -745,18 +744,18 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     // Construct RpcTimeout with a single property
     val rt1 = RpcTimeout(conf, testProp)
-    assert( testDurationSeconds === rt1.duration.toSeconds )
+    assert(testDurationSeconds === rt1.duration.toSeconds)
 
     // Construct RpcTimeout with prioritized list of properties
     val rt2 = RpcTimeout(conf, Seq("spark.ask.invalid.timeout", testProp, secondaryProp), "1s")
-    assert( testDurationSeconds === rt2.duration.toSeconds )
+    assert(testDurationSeconds === rt2.duration.toSeconds)
 
     // Construct RpcTimeout with default value,
     val defaultProp = "spark.ask.default.timeout"
     val defaultDurationSeconds = 1
     val rt3 = RpcTimeout(conf, Seq(defaultProp), defaultDurationSeconds.toString + "s")
-    assert( defaultDurationSeconds === rt3.duration.toSeconds )
-    assert( rt3.timeoutProp.contains(defaultProp) )
+    assert(defaultDurationSeconds === rt3.duration.toSeconds)
+    assert(rt3.timeoutProp.contains(defaultProp))
 
     // Try to construct RpcTimeout with an unconfigured property
     intercept[NoSuchElementException] {
@@ -801,9 +800,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     // Allow future to complete with failure using plain Await.result, this will return
     // once the future is complete to verify addMessageIfTimeout was invoked
     val reply3 =
-      intercept[RpcTimeoutException] {
-        Await.result(fut3, 2000 millis)
-      }.getMessage
+    intercept[RpcTimeoutException] {
+      Await.result(fut3, 2000 millis)
+    }.getMessage
     // scalastyle:on awaitresult
 
     // When the future timed out, the recover callback should have used
@@ -813,9 +812,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     // Use RpcTimeout.awaitResult to process Future, since it has already failed with
     // RpcTimeoutException, the same RpcTimeoutException should be thrown
     val reply4 =
-      intercept[RpcTimeoutException] {
-        shortTimeout.awaitResult(fut3)
-      }.getMessage
+    intercept[RpcTimeoutException] {
+      shortTimeout.awaitResult(fut3)
+    }.getMessage
 
     // Ensure description is not in message twice after addMessageIfTimeout and awaitResult
     assert(shortTimeout.timeoutProp.r.findAllIn(reply4).length === 1)

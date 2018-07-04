@@ -21,52 +21,39 @@ import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
 
-import scala.collection.mutable.ArrayBuffer
-import scala.runtime.ScalaRunTime
-
 import com.google.common.collect.MapMaker
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.collection.OpenHashSet
 
+import scala.collection.mutable.ArrayBuffer
+import scala.runtime.ScalaRunTime
+
 /**
- * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
- * When a class extends it, [[SizeEstimator]] will query the `estimatedSize` first.
- * If `estimatedSize` does not return [[None]], [[SizeEstimator]] will use the returned size
- * as the size of the object. Otherwise, [[SizeEstimator]] will do the estimation work.
- * The difference between a [[KnownSizeEstimation]] and
- * [[org.apache.spark.util.collection.SizeTracker]] is that, a
- * [[org.apache.spark.util.collection.SizeTracker]] still uses [[SizeEstimator]] to
- * estimate the size. However, a [[KnownSizeEstimation]] can provide a better estimation without
- * using [[SizeEstimator]].
- */
+  * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
+  * When a class extends it, [[SizeEstimator]] will query the `estimatedSize` first.
+  * If `estimatedSize` does not return [[None]], [[SizeEstimator]] will use the returned size
+  * as the size of the object. Otherwise, [[SizeEstimator]] will do the estimation work.
+  * The difference between a [[KnownSizeEstimation]] and
+  * [[org.apache.spark.util.collection.SizeTracker]] is that, a
+  * [[org.apache.spark.util.collection.SizeTracker]] still uses [[SizeEstimator]] to
+  * estimate the size. However, a [[KnownSizeEstimation]] can provide a better estimation without
+  * using [[SizeEstimator]].
+  */
 private[spark] trait KnownSizeEstimation {
   def estimatedSize: Long
 }
 
 /**
- * :: DeveloperApi ::
- * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in
- * memory-aware caches.
- *
- * Based on the following JavaWorld article:
- * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
- */
+  * :: DeveloperApi ::
+  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in
+  * memory-aware caches.
+  *
+  * Based on the following JavaWorld article:
+  * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
+  */
 @DeveloperApi
 object SizeEstimator extends Logging {
-
-  /**
-   * Estimate the number of bytes that the given object takes up on the JVM heap. The estimate
-   * includes space taken up by objects referenced by the given object, their references, and so on
-   * and so forth.
-   *
-   * This is useful for determining the amount of heap space a broadcast variable will occupy on
-   * each executor or the amount of space each object will take when caching objects in
-   * deserialized form. This is not the same as the serialized size of the object, which will
-   * typically be much smaller.
-   */
-  def estimate(obj: AnyRef): Long = estimate(obj, new IdentityHashMap[AnyRef, AnyRef])
 
   // Sizes of primitive types
   private val BYTE_SIZE = 1
@@ -77,32 +64,41 @@ object SizeEstimator extends Logging {
   private val LONG_SIZE = 8
   private val FLOAT_SIZE = 4
   private val DOUBLE_SIZE = 8
-
   // Fields can be primitive types, sizes are: 1, 2, 4, 8. Or fields can be pointers. The size of
   // a pointer is 4 or 8 depending on the JVM (32-bit or 64-bit) and UseCompressedOops flag.
   // The sizes should be in descending order, as we will use that information for fields placement.
   private val fieldSizes = List(8, 4, 2, 1)
-
   // Alignment boundary for objects
   // TODO: Is this arch dependent ?
   private val ALIGN_SIZE = 8
-
   // A cache of ClassInfo objects for each class
   // We use weakKeys to allow GC of dynamically created classes
   private val classInfos = new MapMaker().weakKeys().makeMap[Class[_], ClassInfo]()
-
+  // Estimate the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
+  private val ARRAY_SIZE_FOR_SAMPLING = 400
+  private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
   // Object and pointer sizes are arch dependent
   private var is64bit = false
-
   // Size of an object reference
   // Based on https://wikis.oracle.com/display/HotSpotInternals/CompressedOops
   private var isCompressedOops = false
   private var pointerSize = 4
 
+  initialize()
   // Minimum size of a java.lang.Object
   private var objectSize = 8
 
-  initialize()
+  /**
+    * Estimate the number of bytes that the given object takes up on the JVM heap. The estimate
+    * includes space taken up by objects referenced by the given object, their references, and so on
+    * and so forth.
+    *
+    * This is useful for determining the amount of heap space a broadcast variable will occupy on
+    * each executor or the amount of space each object will take when caching objects in
+    * deserialized form. This is not the same as the serialized size of the object, which will
+    * typically be much smaller.
+    */
+  def estimate(obj: AnyRef): Long = estimate(obj, new IdentityHashMap[AnyRef, AnyRef])
 
   // Sets object size, pointer size based on architecture and CompressedOops settings
   // from the JVM.
@@ -143,7 +139,7 @@ object SizeEstimator extends Logging {
       // scalastyle:off classforname
       val hotSpotMBeanClass = Class.forName("com.sun.management.HotSpotDiagnosticMXBean")
       val getVMMethod = hotSpotMBeanClass.getDeclaredMethod("getVMOption",
-          Class.forName("java.lang.String"))
+        Class.forName("java.lang.String"))
       // scalastyle:on classforname
 
       val bean = ManagementFactory.newPlatformMXBeanProxy(server,
@@ -153,46 +149,12 @@ object SizeEstimator extends Logging {
     } catch {
       case e: Exception =>
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
-        val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
+        val guess = Runtime.getRuntime.maxMemory < (32L * 1024 * 1024 * 1024)
         val guessInWords = if (guess) "yes" else "not"
         logWarning("Failed to check whether UseCompressedOops is set; assuming " + guessInWords)
         return guess
     }
   }
-
-  /**
-   * The state of an ongoing size estimation. Contains a stack of objects to visit as well as an
-   * IdentityHashMap of visited objects, and provides utility methods for enqueueing new objects
-   * to visit.
-   */
-  private class SearchState(val visited: IdentityHashMap[AnyRef, AnyRef]) {
-    val stack = new ArrayBuffer[AnyRef]
-    var size = 0L
-
-    def enqueue(obj: AnyRef) {
-      if (obj != null && !visited.containsKey(obj)) {
-        visited.put(obj, null)
-        stack += obj
-      }
-    }
-
-    def isFinished(): Boolean = stack.isEmpty
-
-    def dequeue(): AnyRef = {
-      val elem = stack.last
-      stack.trimEnd(1)
-      elem
-    }
-  }
-
-  /**
-   * Cached information about each class. We remember two things: the "shell size" of the class
-   * (size of all non-static fields plus the java.lang.Object size), and any fields that are
-   * pointers to objects.
-   */
-  private class ClassInfo(
-    val shellSize: Long,
-    val pointerFields: List[Field]) {}
 
   private def estimate(obj: AnyRef, visited: IdentityHashMap[AnyRef, AnyRef]): Long = {
     val state = new SearchState(visited)
@@ -227,10 +189,6 @@ object SizeEstimator extends Logging {
       }
     }
   }
-
-  // Estimate the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
-  private val ARRAY_SIZE_FOR_SAMPLING = 400
-  private val ARRAY_SAMPLE_SIZE = 100 // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
   private def visitArray(array: AnyRef, arrayClass: Class[_], state: SearchState) {
     val length = ScalaRunTime.array_length(array)
@@ -268,11 +226,11 @@ object SizeEstimator extends Logging {
   }
 
   private def sampleArray(
-      array: AnyRef,
-      state: SearchState,
-      rand: Random,
-      drawn: OpenHashSet[Int],
-      length: Int): Long = {
+                           array: AnyRef,
+                           state: SearchState,
+                           rand: Random,
+                           drawn: OpenHashSet[Int],
+                           length: Int): Long = {
     var size = 0L
     for (i <- 0 until ARRAY_SAMPLE_SIZE) {
       var index = 0
@@ -307,13 +265,13 @@ object SizeEstimator extends Logging {
       DOUBLE_SIZE
     } else {
       throw new IllegalArgumentException(
-      "Non-primitive class " + cls + " passed to primitiveSize()")
+        "Non-primitive class " + cls + " passed to primitiveSize()")
     }
   }
 
   /**
-   * Get or compute the ClassInfo for a given class.
-   */
+    * Get or compute the ClassInfo for a given class.
+    */
   private def getClassInfo(cls: Class[_]): ClassInfo = {
     // Check whether we've already cached a ClassInfo for this class
     val info = classInfos.get(cls)
@@ -378,12 +336,46 @@ object SizeEstimator extends Logging {
   private def alignSize(size: Long): Long = alignSizeUp(size, ALIGN_SIZE)
 
   /**
-   * Compute aligned size. The alignSize must be 2^n, otherwise the result will be wrong.
-   * When alignSize = 2^n, alignSize - 1 = 2^n - 1. The binary representation of (alignSize - 1)
-   * will only have n trailing 1s(0b00...001..1). ~(alignSize - 1) will be 0b11..110..0. Hence,
-   * (size + alignSize - 1) & ~(alignSize - 1) will set the last n bits to zeros, which leads to
-   * multiple of alignSize.
-   */
+    * Compute aligned size. The alignSize must be 2^n, otherwise the result will be wrong.
+    * When alignSize = 2^n, alignSize - 1 = 2^n - 1. The binary representation of (alignSize - 1)
+    * will only have n trailing 1s(0b00...001..1). ~(alignSize - 1) will be 0b11..110..0. Hence,
+    * (size + alignSize - 1) & ~(alignSize - 1) will set the last n bits to zeros, which leads to
+    * multiple of alignSize.
+    **/
   private def alignSizeUp(size: Long, alignSize: Int): Long =
     (size + alignSize - 1) & ~(alignSize - 1)
+
+  /**
+    * The state of an ongoing size estimation. Contains a stack of objects to visit as well as an
+    * IdentityHashMap of visited objects, and provides utility methods for enqueueing new objects
+    * to visit.
+    */
+  private class SearchState(val visited: IdentityHashMap[AnyRef, AnyRef]) {
+    val stack = new ArrayBuffer[AnyRef]
+    var size = 0L
+
+    def enqueue(obj: AnyRef) {
+      if (obj != null && !visited.containsKey(obj)) {
+        visited.put(obj, null)
+        stack += obj
+      }
+    }
+
+    def isFinished(): Boolean = stack.isEmpty
+
+    def dequeue(): AnyRef = {
+      val elem = stack.last
+      stack.trimEnd(1)
+      elem
+    }
+  }
+
+  /**
+    * Cached information about each class. We remember two things: the "shell size" of the class
+    * (size of all non-static fields plus the java.lang.Object size), and any fields that are
+    * pointers to objects.
+    */
+  private class ClassInfo(
+                           val shellSize: Long,
+                           val pointerFields: List[Field]) {}
 }

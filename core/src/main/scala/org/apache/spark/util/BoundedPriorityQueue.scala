@@ -24,10 +24,10 @@ import scala.collection.JavaConverters._
 import scala.collection.generic.Growable
 
 /**
- * Bounded priority queue. This class wraps the original PriorityQueue
- * class and modifies it such that only the top K elements are retained.
- * The top K elements are defined by an implicit Ordering[A].
- */
+  * Bounded priority queue. This class wraps the original PriorityQueue
+  * class and modifies it such that only the top K elements are retained.
+  * The top K elements are defined by an implicit Ordering[A].
+  */
 private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Ordering[A])
   extends Iterable[A] with Growable[A] with Serializable {
 
@@ -35,10 +35,18 @@ private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Orderin
 
   override def iterator: Iterator[A] = underlying.iterator.asScala
 
-  override def size: Int = underlying.size
+  def poll(): A = {
+    underlying.poll()
+  }
+
+  override def +=(elem1: A, elem2: A, elems: A*): this.type = {
+    this += elem1 += elem2 ++= elems
+  }
 
   override def ++=(xs: TraversableOnce[A]): this.type = {
-    xs.foreach { this += _ }
+    xs.foreach {
+      this += _
+    }
     this
   }
 
@@ -51,15 +59,7 @@ private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Orderin
     this
   }
 
-  def poll(): A = {
-    underlying.poll()
-  }
-
-  override def +=(elem1: A, elem2: A, elems: A*): this.type = {
-    this += elem1 += elem2 ++= elems
-  }
-
-  override def clear() { underlying.clear() }
+  override def size: Int = underlying.size
 
   private def maybeReplaceLowest(a: A): Boolean = {
     val head = underlying.peek()
@@ -69,5 +69,9 @@ private[spark] class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Orderin
     } else {
       false
     }
+  }
+
+  override def clear() {
+    underlying.clear()
   }
 }

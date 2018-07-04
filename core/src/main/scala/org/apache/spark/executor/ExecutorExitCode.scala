@@ -20,13 +20,13 @@ package org.apache.spark.executor
 import org.apache.spark.util.SparkExitCode._
 
 /**
- * These are exit codes that executors should use to provide the master with information about
- * executor failures assuming that cluster management framework can capture the exit codes (but
- * perhaps not log files). The exit code constants here are chosen to be unlikely to conflict
- * with "natural" exit statuses that may be caused by the JVM or user code. In particular,
- * exit codes 128+ arise on some Unix-likes as a result of signals, and it appears that the
- * OpenJDK JVM may use exit code 1 in some of its own "last chance" code.
- */
+  * These are exit codes that executors should use to provide the master with information about
+  * executor failures assuming that cluster management framework can capture the exit codes (but
+  * perhaps not log files). The exit code constants here are chosen to be unlikely to conflict
+  * with "natural" exit statuses that may be caused by the JVM or user code. In particular,
+  * exit codes 128+ arise on some Unix-likes as a result of signals, and it appears that the
+  * OpenJDK JVM may use exit code 1 in some of its own "last chance" code.
+  */
 private[spark]
 object ExecutorExitCode {
 
@@ -40,9 +40,9 @@ object ExecutorExitCode {
   val EXTERNAL_BLOCK_STORE_FAILED_TO_CREATE_DIR = 55
 
   /**
-   * Executor is unable to send heartbeats to the driver more than
-   * "spark.executor.heartbeat.maxFailures" times.
-   */
+    * Executor is unable to send heartbeats to the driver more than
+    * "spark.executor.heartbeat.maxFailures" times.
+    */
   val HEARTBEAT_FAILURE = 56
 
   def explainExitCode(exitCode: Int): String = {
@@ -66,7 +66,7 @@ object ExecutorExitCode {
           } else {
             ""
           }
-        )
+          )
     }
   }
 }

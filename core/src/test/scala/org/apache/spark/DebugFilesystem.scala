@@ -21,12 +21,10 @@ import java.io.{FileDescriptor, InputStream}
 import java.lang
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable
-
 import org.apache.hadoop.fs._
-
 import org.apache.spark.internal.Logging
+
+import scala.collection.mutable
 
 object DebugFilesystem extends Logging {
   // Stores the set of active streams and their creation sites.
@@ -58,11 +56,12 @@ object DebugFilesystem extends Logging {
 }
 
 /**
- * DebugFilesystem wraps file open calls to track all open connections. This can be used in tests
- * to check that connections are not leaked.
- */
+  * DebugFilesystem wraps file open calls to track all open connections. This can be used in tests
+  * to check that connections are not leaked.
+  */
 // TODO(ekl) we should consider always interposing this to expose num open conns as a metric
 class DebugFilesystem extends LocalFileSystem {
+
   import DebugFilesystem._
 
   override def open(f: Path, bufferSize: Int): FSDataInputStream = {

@@ -17,11 +17,8 @@
 
 package org.apache.spark.ui
 
-import java.util.{Date, List => JList, ServiceLoader}
+import java.util.Date
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.{JobExecutionStatus, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
@@ -31,24 +28,24 @@ import org.apache.spark.ui.env.EnvironmentTab
 import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.{JobsTab, StagesTab}
 import org.apache.spark.ui.storage.StorageTab
-import org.apache.spark.util.Utils
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 
 /**
- * Top level user interface for a Spark application.
- */
-private[spark] class SparkUI private (
-    val store: AppStatusStore,
-    val sc: Option[SparkContext],
-    val conf: SparkConf,
-    securityManager: SecurityManager,
-    var appName: String,
-    val basePath: String,
-    val startTime: Long,
-    val appSparkVersion: String)
+  * Top level user interface for a Spark application.
+  */
+private[spark] class SparkUI private(
+                                      val store: AppStatusStore,
+                                      val sc: Option[SparkContext],
+                                      val conf: SparkConf,
+                                      securityManager: SecurityManager,
+                                      var appName: String,
+                                      val basePath: String,
+                                      val startTime: Long,
+                                      val appSparkVersion: String)
   extends WebUI(securityManager, securityManager.getSSLOptions("ui"), SparkUI.getUIPort(conf),
     conf, basePath, "SparkUI")
-  with Logging
-  with UIRoot {
+    with Logging
+    with UIRoot {
 
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
 
@@ -79,16 +76,6 @@ private[spark] class SparkUI private (
 
   initialize()
 
-  def getSparkUser: String = {
-    try {
-      Option(store.applicationInfo().attempts.head.sparkUser)
-        .orElse(store.environmentInfo().systemProperties.toMap.get("user.name"))
-        .getOrElse("<unknown>")
-    } catch {
-      case _: NoSuchElementException => "<unknown>"
-    }
-  }
-
   def getAppName: String = appName
 
   def setAppId(id: String): Unit = {
@@ -107,6 +94,10 @@ private[spark] class SparkUI private (
     } else {
       throw new NoSuchElementException()
     }
+  }
+
+  def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
+    getApplicationInfoList.find(_.id == appId)
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
@@ -130,8 +121,14 @@ private[spark] class SparkUI private (
     ))
   }
 
-  def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
-    getApplicationInfoList.find(_.id == appId)
+  def getSparkUser: String = {
+    try {
+      Option(store.applicationInfo().attempts.head.sparkUser)
+        .orElse(store.environmentInfo().systemProperties.toMap.get("user.name"))
+        .getOrElse("<unknown>")
+    } catch {
+      case _: NoSuchElementException => "<unknown>"
+    }
   }
 
   def getStreamingJobProgressListener: Option[SparkListener] = streamingJobProgressListener
@@ -160,17 +157,17 @@ private[spark] object SparkUI {
   }
 
   /**
-   * Create a new UI backed by an AppStatusStore.
-   */
+    * Create a new UI backed by an AppStatusStore.
+    */
   def create(
-      sc: Option[SparkContext],
-      store: AppStatusStore,
-      conf: SparkConf,
-      securityManager: SecurityManager,
-      appName: String,
-      basePath: String,
-      startTime: Long,
-      appSparkVersion: String = org.apache.spark.SPARK_VERSION): SparkUI = {
+              sc: Option[SparkContext],
+              store: AppStatusStore,
+              conf: SparkConf,
+              securityManager: SecurityManager,
+              appName: String,
+              basePath: String,
+              startTime: Long,
+              appSparkVersion: String = org.apache.spark.SPARK_VERSION): SparkUI = {
 
     new SparkUI(store, sc, conf, securityManager, appName, basePath, startTime, appSparkVersion)
   }

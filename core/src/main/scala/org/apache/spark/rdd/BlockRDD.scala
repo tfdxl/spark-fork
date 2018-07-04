@@ -17,10 +17,10 @@
 
 package org.apache.spark.rdd
 
-import scala.reflect.ClassTag
-
 import org.apache.spark._
 import org.apache.spark.storage.{BlockId, BlockManager}
+
+import scala.reflect.ClassTag
 
 private[spark] class BlockRDDPartition(val blockId: BlockId, idx: Int) extends Partition {
   val index = idx
@@ -40,6 +40,22 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
     }.toArray
   }
 
+  /** Check if this BlockRDD is valid. If not valid, exception is thrown. */
+  private[spark] def assertValid() {
+    if (!isValid) {
+      throw new SparkException(
+        "Attempted to use %s after its blocks have been removed!".format(toString))
+    }
+  }
+
+  /**
+    * Whether this BlockRDD is actually usable. This will be false if the data blocks have been
+    * removed using `this.removeBlocks`.
+    */
+  private[spark] def isValid: Boolean = {
+    _isValid
+  }
+
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     assertValid()
     val blockManager = SparkEnv.get.blockManager
@@ -56,36 +72,20 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
     _locations(split.asInstanceOf[BlockRDDPartition].blockId)
   }
 
+  protected def getBlockIdLocations(): Map[BlockId, Seq[String]] = {
+    _locations
+  }
+
   /**
-   * Remove the data blocks that this BlockRDD is made from. NOTE: This is an
-   * irreversible operation, as the data in the blocks cannot be recovered back
-   * once removed. Use it with caution.
-   */
+    * Remove the data blocks that this BlockRDD is made from. NOTE: This is an
+    * irreversible operation, as the data in the blocks cannot be recovered back
+    * once removed. Use it with caution.
+    */
   private[spark] def removeBlocks() {
     blockIds.foreach { blockId =>
       sparkContext.env.blockManager.master.removeBlock(blockId)
     }
     _isValid = false
-  }
-
-  /**
-   * Whether this BlockRDD is actually usable. This will be false if the data blocks have been
-   * removed using `this.removeBlocks`.
-   */
-  private[spark] def isValid: Boolean = {
-    _isValid
-  }
-
-  /** Check if this BlockRDD is valid. If not valid, exception is thrown. */
-  private[spark] def assertValid() {
-    if (!isValid) {
-      throw new SparkException(
-        "Attempted to use %s after its blocks have been removed!".format(toString))
-    }
-  }
-
-  protected def getBlockIdLocations(): Map[BlockId, Seq[String]] = {
-    _locations
   }
 }
 

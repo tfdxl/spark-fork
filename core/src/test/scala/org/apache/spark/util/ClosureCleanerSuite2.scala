@@ -19,19 +19,26 @@ package org.apache.spark.util
 
 import java.io.NotSerializableException
 
-import scala.collection.mutable
-
+import org.apache.spark.serializer.SerializerInstance
+import org.apache.spark.{SparkContext, SparkException, SparkFunSuite}
 import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 
-import org.apache.spark.{SparkContext, SparkException, SparkFunSuite}
-import org.apache.spark.serializer.SerializerInstance
+import scala.collection.mutable
 
 /**
- * Another test suite for the closure cleaner that is finer-grained.
- * For tests involving end-to-end Spark jobs, see {{ClosureCleanerSuite}}.
- */
+  * Another test suite for the closure cleaner that is finer-grained.
+  * For tests involving end-to-end Spark jobs, see {{ClosureCleanerSuite}}.
+  */
 class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with PrivateMethodTester {
 
+  // Some fields and methods to reference in inner closures later
+  private val someSerializableValue = 1
+  private val someNonSerializableValue = new NonSerializable
+  // Accessors for private methods
+  private val _isClosure = PrivateMethod[Boolean]('isClosure)
+  private val _getInnerClosureClasses = PrivateMethod[List[Class[_]]]('getInnerClosureClasses)
+  private val _getOuterClassesAndObjects =
+    PrivateMethod[(List[Class[_]], List[AnyRef])]('getOuterClassesAndObjects)
   // Start a SparkContext so that the closure serializer is accessible
   // We do not actually use this explicitly otherwise
   private var sc: SparkContext = null
@@ -53,47 +60,34 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     }
   }
 
-  // Some fields and methods to reference in inner closures later
-  private val someSerializableValue = 1
-  private val someNonSerializableValue = new NonSerializable
   private def someSerializableMethod() = 1
+
   private def someNonSerializableMethod() = new NonSerializable
 
-  /** Assert that the given closure is serializable (or not). */
-  private def assertSerializable(closure: AnyRef, serializable: Boolean): Unit = {
-    if (serializable) {
-      closureSerializer.serialize(closure)
-    } else {
-      intercept[NotSerializableException] {
-        closureSerializer.serialize(closure)
-      }
-    }
-  }
-
   /**
-   * Helper method for testing whether closure cleaning works as expected.
-   * This cleans the given closure twice, with and without transitive cleaning.
-   *
-   * @param closure closure to test cleaning with
-   * @param serializableBefore if true, verify that the closure is serializable
-   *                           before cleaning, otherwise assert that it is not
-   * @param serializableAfter if true, assert that the closure is serializable
-   *                          after cleaning otherwise assert that it is not
-   */
+    * Helper method for testing whether closure cleaning works as expected.
+    * This cleans the given closure twice, with and without transitive cleaning.
+    *
+    * @param closure            closure to test cleaning with
+    * @param serializableBefore if true, verify that the closure is serializable
+    *                           before cleaning, otherwise assert that it is not
+    * @param serializableAfter  if true, assert that the closure is serializable
+    *                           after cleaning otherwise assert that it is not
+    */
   private def verifyCleaning(
-      closure: AnyRef,
-      serializableBefore: Boolean,
-      serializableAfter: Boolean): Unit = {
+                              closure: AnyRef,
+                              serializableBefore: Boolean,
+                              serializableAfter: Boolean): Unit = {
     verifyCleaning(closure, serializableBefore, serializableAfter, transitive = true)
     verifyCleaning(closure, serializableBefore, serializableAfter, transitive = false)
   }
 
   /** Helper method for testing whether closure cleaning works as expected. */
   private def verifyCleaning(
-      closure: AnyRef,
-      serializableBefore: Boolean,
-      serializableAfter: Boolean,
-      transitive: Boolean): Unit = {
+                              closure: AnyRef,
+                              serializableBefore: Boolean,
+                              serializableAfter: Boolean,
+                              transitive: Boolean): Unit = {
     assertSerializable(closure, serializableBefore)
     // If the resulting closure is not serializable even after
     // cleaning, we expect ClosureCleaner to throw a SparkException
@@ -107,14 +101,25 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     assertSerializable(closure, serializableAfter)
   }
 
+  /** Assert that the given closure is serializable (or not). */
+  private def assertSerializable(closure: AnyRef, serializable: Boolean): Unit = {
+    if (serializable) {
+      closureSerializer.serialize(closure)
+    } else {
+      intercept[NotSerializableException] {
+        closureSerializer.serialize(closure)
+      }
+    }
+  }
+
   /**
-   * Return the fields accessed by the given closure by class.
-   * This also optionally finds the fields transitively referenced through methods invocations.
-   */
+    * Return the fields accessed by the given closure by class.
+    * This also optionally finds the fields transitively referenced through methods invocations.
+    */
   private def findAccessedFields(
-      closure: AnyRef,
-      outerClasses: Seq[Class[_]],
-      findTransitively: Boolean): Map[Class[_], Set[String]] = {
+                                  closure: AnyRef,
+                                  outerClasses: Seq[Class[_]],
+                                  findTransitively: Boolean): Map[Class[_], Set[String]] = {
     val fields = new mutable.HashMap[Class[_], mutable.Set[String]]
     outerClasses.foreach { c => fields(c) = new mutable.HashSet[String] }
     val cr = ClosureCleaner.getClassReader(closure.getClass)
@@ -125,12 +130,6 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
       fields.mapValues(_.toSet).toMap
     }
   }
-
-  // Accessors for private methods
-  private val _isClosure = PrivateMethod[Boolean]('isClosure)
-  private val _getInnerClosureClasses = PrivateMethod[List[Class[_]]]('getInnerClosureClasses)
-  private val _getOuterClassesAndObjects =
-    PrivateMethod[(List[Class[_]], List[AnyRef])]('getOuterClassesAndObjects)
 
   private def isClosure(obj: AnyRef): Boolean = {
     ClosureCleaner invokePrivate _isClosure(obj)
@@ -224,6 +223,7 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
 
     val test2 = () => {
       def y = 1
+
       val closure1 = () => 1
       val closure2 = () => y
       val closure3 = () => localValue
@@ -300,6 +300,7 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
 
     val test1 = () => {
       def a = localValue + 1
+
       val closure1 = () => 1
       val closure2 = () => a
       val closure3 = () => localValue
@@ -421,8 +422,8 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     }
     val closure3 = (k: Int, l: Int, m: Int) => {
       (1 to k).flatMap(closure2) ++ // 4 levels
-      (1 to l).flatMap(closure1) ++ // 3 levels
-      (1 to m).map { x => x + 1 } // 2 levels
+        (1 to l).flatMap(closure1) ++ // 3 levels
+        (1 to m).map { x => x + 1 } // 2 levels
     }
     val closure1r = closure1(1)
     val closure2r = closure2(2)
@@ -440,14 +441,23 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
 
   test("clean basic nested non-serializable closures") {
     def localSerializableMethod(): Int = someSerializableValue
+
     val localNonSerializableValue = someNonSerializableValue
     // These closures ultimately reference the ClosureCleanerSuite2
     // Note that even accessing `val` that is an instance variable involves a method call
-    val closure1 = (i: Int) => { (1 to i).map { x => x + someSerializableValue } }
-    val closure2 = (j: Int) => { (1 to j).map { x => x + someSerializableMethod() } }
-    val closure4 = (k: Int) => { (1 to k).map { x => x + localSerializableMethod() } }
+    val closure1 = (i: Int) => {
+      (1 to i).map { x => x + someSerializableValue }
+    }
+    val closure2 = (j: Int) => {
+      (1 to j).map { x => x + someSerializableMethod() }
+    }
+    val closure4 = (k: Int) => {
+      (1 to k).map { x => x + localSerializableMethod() }
+    }
     // This closure references a local non-serializable value
-    val closure3 = (l: Int) => { (1 to l).map { x => localNonSerializableValue } }
+    val closure3 = (l: Int) => {
+      (1 to l).map { x => localNonSerializableValue }
+    }
     // This is non-serializable no matter how many levels we nest it
     val closure5 = (m: Int) => {
       (1 to m).foreach { x =>
@@ -486,10 +496,14 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     // Reference local fields and methods from all levels within the outermost closure
     val closure2 = (i: Int) => {
       val a1 = 1
+
       def a2 = 2
+
       (1 to i).flatMap { x =>
         val b1 = a1 + 1
+
         def b2 = a2 + 1
+
         (1 to x).map { y =>
           // If this references a method outside the outermost closure, then it will try to pull
           // in the ClosureCleanerSuite2. This is why `localValue` here must be a local `val`.
@@ -531,6 +545,7 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
     // The difference here is that all inner closures now have pointers to the outer closure
     val test2 = () => {
       def a = localValue
+
       val b = sc
       val inner1 = (x: Int) => x + a + b.hashCode()
       val inner2 = (x: Int) => x + a

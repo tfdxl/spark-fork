@@ -19,27 +19,27 @@ package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
 
-import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
-import scala.reflect.ClassTag
-
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 
+import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
+import scala.reflect.ClassTag
+
 /**
- * The references to rdd and splitIndex are transient because redundant information is stored
- * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from
- * CoGroupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
- * task closure.
- */
+  * The references to rdd and splitIndex are transient because redundant information is stored
+  * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from
+  * CoGroupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
+  * task closure.
+  */
 private[spark] case class NarrowCoGroupSplitDep(
-    @transient rdd: RDD[_],
-    @transient splitIndex: Int,
-    var split: Partition
-  ) extends Serializable {
+                                                 @transient rdd: RDD[_],
+                                                 @transient splitIndex: Int,
+                                                 var split: Partition
+                                               ) extends Serializable {
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
@@ -50,44 +50,44 @@ private[spark] case class NarrowCoGroupSplitDep(
 }
 
 /**
- * Stores information about the narrow dependencies used by a CoGroupedRdd.
- *
- * @param narrowDeps maps to the dependencies variable in the parent RDD: for each one to one
- *                   dependency in dependencies, narrowDeps has a NarrowCoGroupSplitDep (describing
- *                   the partition for that dependency) at the corresponding index. The size of
- *                   narrowDeps should always be equal to the number of parents.
- */
+  * Stores information about the narrow dependencies used by a CoGroupedRdd.
+  *
+  * @param narrowDeps maps to the dependencies variable in the parent RDD: for each one to one
+  *                   dependency in dependencies, narrowDeps has a NarrowCoGroupSplitDep (describing
+  *                   the partition for that dependency) at the corresponding index. The size of
+  *                   narrowDeps should always be equal to the number of parents.
+  */
 private[spark] class CoGroupPartition(
-    override val index: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
+                                       override val index: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
   extends Partition with Serializable {
   override def hashCode(): Int = index
+
   override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**
- * :: DeveloperApi ::
- * An RDD that cogroups its parents. For each key k in parent RDDs, the resulting RDD contains a
- * tuple with the list of values for that key.
- *
- * @param rdds parent RDDs.
- * @param part partitioner used to partition the shuffle output
- *
- * @note This is an internal API. We recommend users use RDD.cogroup(...) instead of
- * instantiating this directly.
- */
+  * :: DeveloperApi ::
+  * An RDD that cogroups its parents. For each key k in parent RDDs, the resulting RDD contains a
+  * tuple with the list of values for that key.
+  *
+  * @param rdds parent RDDs.
+  * @param part partitioner used to partition the shuffle output
+  * @note This is an internal API. We recommend users use RDD.cogroup(...) instead of
+  *       instantiating this directly.
+  */
 @DeveloperApi
 class CoGroupedRDD[K: ClassTag](
-    @transient var rdds: Seq[RDD[_ <: Product2[K, _]]],
-    part: Partitioner)
+                                 @transient var rdds: Seq[RDD[_ <: Product2[K, _]]],
+                                 part: Partitioner)
   extends RDD[(K, Array[Iterable[_]])](rdds.head.context, Nil) {
 
   // For example, `(k, a) cogroup (k, b)` produces k -> Array(ArrayBuffer as, ArrayBuffer bs).
   // Each ArrayBuffer is represented as a CoGroup, and the resulting Array as a CoGroupCombiner.
   // CoGroupValue is the intermediate state of each value before being merged in compute.
   private type CoGroup = CompactBuffer[Any]
-  private type CoGroupValue = (Any, Int)  // Int is dependency number
+  private type CoGroupValue = (Any, Int) // Int is dependency number
   private type CoGroupCombiner = Array[CoGroup]
-
+  override val partitioner: Some[Partitioner] = Some(part)
   private var serializer: Serializer = SparkEnv.get.serializer
 
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
@@ -126,8 +126,6 @@ class CoGroupedRDD[K: ClassTag](
     array
   }
 
-  override val partitioner: Some[Partitioner] = Some(part)
-
   override def compute(s: Partition, context: TaskContext): Iterator[(K, Array[Iterable[_]])] = {
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = dependencies.length
@@ -135,7 +133,7 @@ class CoGroupedRDD[K: ClassTag](
     // A list of (rdd iterator, dependency number) pairs
     val rddIterators = new ArrayBuffer[(Iterator[Product2[K, Any]], Int)]
     for ((dep, depNum) <- dependencies.zipWithIndex) dep match {
-      case oneToOneDependency: OneToOneDependency[Product2[K, Any]] @unchecked =>
+      case oneToOneDependency: OneToOneDependency[Product2[K, Any]]@unchecked =>
         val dependencyPartition = split.narrowDeps(depNum).get.split
         // Read them from the parent
         val it = oneToOneDependency.rdd.iterator(dependencyPartition, context)
@@ -161,7 +159,7 @@ class CoGroupedRDD[K: ClassTag](
   }
 
   private def createExternalMap(numRdds: Int)
-    : ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner] = {
+  : ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner] = {
 
     val createCombiner: (CoGroupValue => CoGroupCombiner) = value => {
       val newCombiner = Array.fill(numRdds)(new CoGroup)
@@ -170,9 +168,9 @@ class CoGroupedRDD[K: ClassTag](
     }
     val mergeValue: (CoGroupCombiner, CoGroupValue) => CoGroupCombiner =
       (combiner, value) => {
-      combiner(value._2) += value._1
-      combiner
-    }
+        combiner(value._2) += value._1
+        combiner
+      }
     val mergeCombiners: (CoGroupCombiner, CoGroupCombiner) => CoGroupCombiner =
       (combiner1, combiner2) => {
         var depNum = 0

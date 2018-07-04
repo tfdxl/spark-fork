@@ -17,19 +17,18 @@
 
 package org.apache.spark
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.TransportServer
 import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleClient}
+import org.scalatest.BeforeAndAfterAll
 
 /**
- * This suite creates an external shuffle server and routes all shuffle fetches through it.
- * Note that failures in this suite may arise due to changes in Spark that invalidate expectations
- * set up in `ExternalShuffleBlockHandler`, such as changing the format of shuffle files or how
- * we hash files into folders.
- */
+  * This suite creates an external shuffle server and routes all shuffle fetches through it.
+  * Note that failures in this suite may arise due to changes in Spark that invalidate expectations
+  * set up in `ExternalShuffleBlockHandler`, such as changing the format of shuffle files or how
+  * we hash files into folders.
+  */
 class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
   var server: TransportServer = _
   var rpcHandler: ExternalShuffleBlockHandler = _
@@ -82,6 +81,6 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
     val e = intercept[SparkException] {
       rdd.count()
     }
-    e.getMessage should include ("Fetch failure will not retry stage due to testing config")
+    e.getMessage should include("Fetch failure will not retry stage due to testing config")
   }
 }

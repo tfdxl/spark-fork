@@ -19,13 +19,12 @@ package org.apache.spark
 
 import java.io.File
 import java.util.UUID
-import javax.net.ssl.SSLContext
 
+import javax.net.ssl.SSLContext
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.alias.{CredentialProvider, CredentialProviderFactory}
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.util.SparkConfWithEnv
+import org.scalatest.BeforeAndAfterAll
 
 class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
@@ -206,9 +205,9 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   private def storePassword(
-      provider: CredentialProvider,
-      passwordKey: String,
-      password: String): Unit = {
+                             provider: CredentialProvider,
+                             passwordKey: String,
+                             password: String): Unit = {
     provider.createCredentialEntry(passwordKey, password.toCharArray)
     provider.flush()
   }

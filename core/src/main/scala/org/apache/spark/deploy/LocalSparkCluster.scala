@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
@@ -26,18 +24,20 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
- * Testing class that creates a Spark standalone process in-cluster (that is, running the
- * spark.deploy.master.Master and spark.deploy.worker.Workers in the same JVMs). Executors launched
- * by the Workers still run in separate JVMs. This can be used to test distributed operation and
- * fault recovery without spinning up a lot of processes.
- */
+  * Testing class that creates a Spark standalone process in-cluster (that is, running the
+  * spark.deploy.master.Master and spark.deploy.worker.Workers in the same JVMs). Executors launched
+  * by the Workers still run in separate JVMs. This can be used to test distributed operation and
+  * fault recovery without spinning up a lot of processes.
+  */
 private[spark]
 class LocalSparkCluster(
-    numWorkers: Int,
-    coresPerWorker: Int,
-    memoryPerWorker: Int,
-    conf: SparkConf)
+                         numWorkers: Int,
+                         coresPerWorker: Int,
+                         memoryPerWorker: Int,
+                         conf: SparkConf)
   extends Logging {
 
   private val localHostname = Utils.localHostName()

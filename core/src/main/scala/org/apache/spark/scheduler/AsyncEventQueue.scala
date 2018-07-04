@@ -21,26 +21,25 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import com.codahale.metrics.{Gauge, Timer}
-
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
- * An asynchronous queue for events. All events posted to this queue will be delivered to the child
- * listeners in a separate thread.
- *
- * Delivery will only begin when the `start()` method is called. The `stop()` method should be
- * called when no more events need to be delivered.
- */
+  * An asynchronous queue for events. All events posted to this queue will be delivered to the child
+  * listeners in a separate thread.
+  *
+  * Delivery will only begin when the `start()` method is called. The `stop()` method should be
+  * called when no more events need to be delivered.
+  */
 private class AsyncEventQueue(
-    val name: String,
-    conf: SparkConf,
-    metrics: LiveListenerBusMetrics,
-    bus: LiveListenerBus)
+                               val name: String,
+                               conf: SparkConf,
+                               metrics: LiveListenerBusMetrics,
+                               bus: LiveListenerBus)
   extends SparkListenerBus
-  with Logging {
+    with Logging {
 
   import AsyncEventQueue._
 
@@ -56,19 +55,20 @@ private class AsyncEventQueue(
 
   /** A counter for dropped events. It will be reset every time we log it. */
   private val droppedEventsCounter = new AtomicLong(0L)
-
-  /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private var lastReportTimestamp = 0L
-
   private val logDroppedEvent = new AtomicBoolean(false)
-
-  private var sc: SparkContext = null
-
   private val started = new AtomicBoolean(false)
   private val stopped = new AtomicBoolean(false)
-
   private val droppedEvents = metrics.metricRegistry.counter(s"queue.$name.numDroppedEvents")
   private val processingTime = metrics.metricRegistry.timer(s"queue.$name.listenerProcessingTime")
+  private val dispatchThread = new Thread(s"spark-listener-group-$name") {
+    setDaemon(true)
+
+    override def run(): Unit = Utils.tryOrStopSparkContext(sc) {
+      dispatch()
+    }
+  }
+  /** When `droppedEventsCounter` was logged last time in milliseconds. */
+  @volatile private var lastReportTimestamp = 0L
 
   // Remove the queue size gauge first, in case it was created by a previous incarnation of
   // this queue that was removed from the listener bus.
@@ -76,65 +76,7 @@ private class AsyncEventQueue(
   metrics.metricRegistry.register(s"queue.$name.size", new Gauge[Int] {
     override def getValue: Int = eventQueue.size()
   })
-
-  private val dispatchThread = new Thread(s"spark-listener-group-$name") {
-    setDaemon(true)
-    override def run(): Unit = Utils.tryOrStopSparkContext(sc) {
-      dispatch()
-    }
-  }
-
-  private def dispatch(): Unit = LiveListenerBus.withinListenerThread.withValue(true) {
-    var next: SparkListenerEvent = eventQueue.take()
-    while (next != POISON_PILL) {
-      val ctx = processingTime.time()
-      try {
-        super.postToAll(next)
-      } finally {
-        ctx.stop()
-      }
-      eventCount.decrementAndGet()
-      next = eventQueue.take()
-    }
-    eventCount.decrementAndGet()
-  }
-
-  override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
-    metrics.getTimerForListenerClass(listener.getClass.asSubclass(classOf[SparkListenerInterface]))
-  }
-
-  /**
-   * Start an asynchronous thread to dispatch events to the underlying listeners.
-   *
-   * @param sc Used to stop the SparkContext in case the async dispatcher fails.
-   */
-  private[scheduler] def start(sc: SparkContext): Unit = {
-    if (started.compareAndSet(false, true)) {
-      this.sc = sc
-      dispatchThread.start()
-    } else {
-      throw new IllegalStateException(s"$name already started!")
-    }
-  }
-
-  /**
-   * Stop the listener bus. It will wait until the queued events have been processed, but new
-   * events will be dropped.
-   */
-  private[scheduler] def stop(): Unit = {
-    if (!started.get()) {
-      throw new IllegalStateException(s"Attempted to stop $name that has not yet started!")
-    }
-    if (stopped.compareAndSet(false, true)) {
-      eventCount.incrementAndGet()
-      eventQueue.put(POISON_PILL)
-    }
-    // this thread might be trying to stop itself as part of error handling -- we can't join
-    // in that case.
-    if (Thread.currentThread() != dispatchThread) {
-      dispatchThread.join()
-    }
-  }
+  private var sc: SparkContext = null
 
   def post(event: SparkListenerEvent): Unit = {
     if (stopped.get()) {
@@ -176,10 +118,10 @@ private class AsyncEventQueue(
   }
 
   /**
-   * For testing only. Wait until there are no more events in the queue.
-   *
-   * @return true if the queue is empty.
-   */
+    * For testing only. Wait until there are no more events in the queue.
+    *
+    * @return true if the queue is empty.
+    */
   def waitUntilEmpty(deadline: Long): Boolean = {
     while (eventCount.get() != 0) {
       if (System.currentTimeMillis > deadline) {
@@ -196,10 +138,62 @@ private class AsyncEventQueue(
     bus.removeListener(listener)
   }
 
+  override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
+    metrics.getTimerForListenerClass(listener.getClass.asSubclass(classOf[SparkListenerInterface]))
+  }
+
+  private def dispatch(): Unit = LiveListenerBus.withinListenerThread.withValue(true) {
+    var next: SparkListenerEvent = eventQueue.take()
+    while (next != POISON_PILL) {
+      val ctx = processingTime.time()
+      try {
+        super.postToAll(next)
+      } finally {
+        ctx.stop()
+      }
+      eventCount.decrementAndGet()
+      next = eventQueue.take()
+    }
+    eventCount.decrementAndGet()
+  }
+
+  /**
+    * Start an asynchronous thread to dispatch events to the underlying listeners.
+    *
+    * @param sc Used to stop the SparkContext in case the async dispatcher fails.
+    */
+  private[scheduler] def start(sc: SparkContext): Unit = {
+    if (started.compareAndSet(false, true)) {
+      this.sc = sc
+      dispatchThread.start()
+    } else {
+      throw new IllegalStateException(s"$name already started!")
+    }
+  }
+
+  /**
+    * Stop the listener bus. It will wait until the queued events have been processed, but new
+    * events will be dropped.
+    */
+  private[scheduler] def stop(): Unit = {
+    if (!started.get()) {
+      throw new IllegalStateException(s"Attempted to stop $name that has not yet started!")
+    }
+    if (stopped.compareAndSet(false, true)) {
+      eventCount.incrementAndGet()
+      eventQueue.put(POISON_PILL)
+    }
+    // this thread might be trying to stop itself as part of error handling -- we can't join
+    // in that case.
+    if (Thread.currentThread() != dispatchThread) {
+      dispatchThread.join()
+    }
+  }
+
 }
 
 private object AsyncEventQueue {
 
-  val POISON_PILL = new SparkListenerEvent() { }
+  val POISON_PILL = new SparkListenerEvent() {}
 
 }

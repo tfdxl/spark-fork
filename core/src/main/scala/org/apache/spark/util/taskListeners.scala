@@ -23,10 +23,10 @@ import org.apache.spark.TaskContext
 import org.apache.spark.annotation.DeveloperApi
 
 /**
- * :: DeveloperApi ::
- *
- * Listener providing a callback function to invoke when a task's execution completes.
- */
+  * :: DeveloperApi ::
+  *
+  * Listener providing a callback function to invoke when a task's execution completes.
+  */
 @DeveloperApi
 trait TaskCompletionListener extends EventListener {
   def onTaskCompletion(context: TaskContext): Unit
@@ -34,11 +34,11 @@ trait TaskCompletionListener extends EventListener {
 
 
 /**
- * :: DeveloperApi ::
- *
- * Listener providing a callback function to invoke when a task's execution encounters an error.
- * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
- */
+  * :: DeveloperApi ::
+  *
+  * Listener providing a callback function to invoke when a task's execution encounters an error.
+  * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+  */
 @DeveloperApi
 trait TaskFailureListener extends EventListener {
   def onTaskFailure(context: TaskContext, error: Throwable): Unit
@@ -46,12 +46,12 @@ trait TaskFailureListener extends EventListener {
 
 
 /**
- * Exception thrown when there is an exception in executing the callback in TaskCompletionListener.
- */
+  * Exception thrown when there is an exception in executing the callback in TaskCompletionListener.
+  */
 private[spark]
 class TaskCompletionListenerException(
-    errorMessages: Seq[String],
-    val previousError: Option[Throwable] = None)
+                                       errorMessages: Seq[String],
+                                       val previousError: Option[Throwable] = None)
   extends RuntimeException {
 
   override def getMessage: String = {

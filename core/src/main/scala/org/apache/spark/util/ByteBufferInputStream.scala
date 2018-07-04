@@ -21,8 +21,8 @@ import java.io.InputStream
 import java.nio.ByteBuffer
 
 /**
- * Reads data from a ByteBuffer.
- */
+  * Reads data from a ByteBuffer.
+  */
 private[spark]
 class ByteBufferInputStream(private var buffer: ByteBuffer)
   extends InputStream {
@@ -33,6 +33,15 @@ class ByteBufferInputStream(private var buffer: ByteBuffer)
       -1
     } else {
       buffer.get() & 0xFF
+    }
+  }
+
+  /**
+    * Clean up the buffer, and potentially dispose of it using StorageUtils.dispose().
+    */
+  private def cleanUp() {
+    if (buffer != null) {
+      buffer = null
     }
   }
 
@@ -61,15 +70,6 @@ class ByteBufferInputStream(private var buffer: ByteBuffer)
       amountToSkip
     } else {
       0L
-    }
-  }
-
-  /**
-   * Clean up the buffer, and potentially dispose of it using StorageUtils.dispose().
-   */
-  private def cleanUp() {
-    if (buffer != null) {
-      buffer = null
     }
   }
 }

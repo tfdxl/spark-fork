@@ -168,6 +168,7 @@ class AccumulatorV2Suite extends SparkFunSuite {
     class MyData(val i: Int) extends Serializable
     val param = new AccumulatorParam[MyData] {
       override def zero(initialValue: MyData): MyData = new MyData(0)
+
       override def addInPlace(r1: MyData, r2: MyData): MyData = new MyData(r1.i + r2.i)
     }
 

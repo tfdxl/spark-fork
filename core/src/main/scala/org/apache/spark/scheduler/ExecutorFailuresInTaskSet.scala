@@ -19,14 +19,14 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashMap
 
 /**
- * Small helper for tracking failed tasks for blacklisting purposes.  Info on all failures on one
- * executor, within one task set.
- */
+  * Small helper for tracking failed tasks for blacklisting purposes.  Info on all failures on one
+  * executor, within one task set.
+  */
 private[scheduler] class ExecutorFailuresInTaskSet(val node: String) {
   /**
-   * Mapping from index of the tasks in the taskset, to the number of times it has failed on this
-   * executor and the most recent failure time.
-   */
+    * Mapping from index of the tasks in the taskset, to the number of times it has failed on this
+    * executor and the most recent failure time.
+    */
   val taskToFailureCountAndFailureTime = HashMap[Int, (Int, Long)]()
 
   def updateWithFailure(taskIndex: Int, failureTime: Long): Unit = {
@@ -38,11 +38,9 @@ private[scheduler] class ExecutorFailuresInTaskSet(val node: String) {
     taskToFailureCountAndFailureTime(taskIndex) = (prevFailureCount + 1, newFailureTime)
   }
 
-  def numUniqueTasksWithFailures: Int = taskToFailureCountAndFailureTime.size
-
   /**
-   * Return the number of times this executor has failed on the given task index.
-   */
+    * Return the number of times this executor has failed on the given task index.
+    */
   def getNumTaskFailures(index: Int): Int = {
     taskToFailureCountAndFailureTime.getOrElse(index, (0, 0))._1
   }
@@ -51,4 +49,6 @@ private[scheduler] class ExecutorFailuresInTaskSet(val node: String) {
     s"numUniqueTasksWithFailures = $numUniqueTasksWithFailures; " +
       s"tasksToFailureCount = $taskToFailureCountAndFailureTime"
   }
+
+  def numUniqueTasksWithFailures: Int = taskToFailureCountAndFailureTime.size
 }

@@ -22,10 +22,10 @@ import org.apache.spark.util.LongAccumulator
 
 
 /**
- * :: DeveloperApi ::
- * Method by which output data was written.
- * Operations are not thread-safe.
- */
+  * :: DeveloperApi ::
+  * Method by which output data was written.
+  * Operations are not thread-safe.
+  */
 @DeveloperApi
 object DataWriteMethod extends Enumeration with Serializable {
   type DataWriteMethod = Value
@@ -34,24 +34,25 @@ object DataWriteMethod extends Enumeration with Serializable {
 
 
 /**
- * :: DeveloperApi ::
- * A collection of accumulators that represents metrics about writing data to external systems.
- */
+  * :: DeveloperApi ::
+  * A collection of accumulators that represents metrics about writing data to external systems.
+  */
 @DeveloperApi
-class OutputMetrics private[spark] () extends Serializable {
+class OutputMetrics private[spark]() extends Serializable {
   private[executor] val _bytesWritten = new LongAccumulator
   private[executor] val _recordsWritten = new LongAccumulator
 
   /**
-   * Total number of bytes written.
-   */
+    * Total number of bytes written.
+    */
   def bytesWritten: Long = _bytesWritten.sum
 
   /**
-   * Total number of records written.
-   */
+    * Total number of records written.
+    */
   def recordsWritten: Long = _recordsWritten.sum
 
   private[spark] def setBytesWritten(v: Long): Unit = _bytesWritten.setValue(v)
+
   private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)
 }

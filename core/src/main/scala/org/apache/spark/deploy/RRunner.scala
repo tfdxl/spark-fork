@@ -20,18 +20,17 @@ package org.apache.spark.deploy
 import java.io._
 import java.util.concurrent.{Semaphore, TimeUnit}
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.fs.Path
-
-import org.apache.spark.{SparkException, SparkUserAppException}
 import org.apache.spark.api.r.{RBackend, RUtils, SparkRDefaults}
 import org.apache.spark.util.RedirectThread
+import org.apache.spark.{SparkException, SparkUserAppException}
+
+import scala.collection.JavaConverters._
 
 /**
- * Main class used to launch SparkR applications using spark-submit. It executes R as a
- * subprocess and then has it connect back to the JVM to access system properties etc.
- */
+  * Main class used to launch SparkR applications using spark-submit. It executes R as a
+  * subprocess and then has it connect back to the JVM to access system properties etc.
+  */
 object RRunner {
   def main(args: Array[String]): Unit = {
     val rFile = PythonRunner.formatPath(args(0))

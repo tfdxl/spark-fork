@@ -19,28 +19,26 @@ package org.apache.spark.mapred
 
 import java.io.IOException
 
-import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
-import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
-
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter, TaskAttemptContext => MapReduceTaskAttemptContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkEnv, TaskContext}
 
 object SparkHadoopMapRedUtil extends Logging {
   /**
-   * Commits a task output.  Before committing the task output, we need to know whether some other
-   * task attempt might be racing to commit the same output partition. Therefore, coordinate with
-   * the driver in order to determine whether this attempt can commit (please see SPARK-4879 for
-   * details).
-   *
-   * Output commit coordinator is only used when `spark.hadoop.outputCommitCoordination.enabled`
-   * is set to true (which is the default).
-   */
+    * Commits a task output.  Before committing the task output, we need to know whether some other
+    * task attempt might be racing to commit the same output partition. Therefore, coordinate with
+    * the driver in order to determine whether this attempt can commit (please see SPARK-4879 for
+    * details).
+    *
+    * Output commit coordinator is only used when `spark.hadoop.outputCommitCoordination.enabled`
+    * is set to true (which is the default).
+    */
   def commitTask(
-      committer: MapReduceOutputCommitter,
-      mrTaskContext: MapReduceTaskAttemptContext,
-      jobId: Int,
-      splitId: Int): Unit = {
+                  committer: MapReduceOutputCommitter,
+                  mrTaskContext: MapReduceTaskAttemptContext,
+                  jobId: Int,
+                  splitId: Int): Unit = {
 
     val mrTaskAttemptID = mrTaskContext.getTaskAttemptID
 

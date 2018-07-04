@@ -17,28 +17,34 @@
 
 package org.apache.spark.ui
 
-import java.net.{BindException, ServerSocket}
-import java.net.{URI, URL}
+import java.net.{BindException, ServerSocket, URI, URL}
 import java.util.Locale
+
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
-
-import scala.io.Source
-
+import org.apache.spark.LocalSparkContext._
+import org.apache.spark._
+import org.apache.spark.util.Utils
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark._
-import org.apache.spark.LocalSparkContext._
-import org.apache.spark.util.Utils
+import scala.io.Source
 
 class UISuite extends SparkFunSuite {
 
+  def stopServer(info: ServerInfo): Unit = {
+    if (info != null) info.stop()
+  }
+
+  def closeSocket(socket: ServerSocket): Unit = {
+    if (socket != null) socket.close
+  }
+
   /**
-   * Create a test SparkContext with the SparkUI enabled.
-   * It is safe to `get` the SparkUI directly from the SparkContext returned here.
-   */
+    * Create a test SparkContext with the SparkUI enabled.
+    * It is safe to `get` the SparkUI directly from the SparkContext returned here.
+    */
   private def newSparkContext(): SparkContext = {
     val conf = new SparkConf()
       .setMaster("local")
@@ -47,24 +53,6 @@ class UISuite extends SparkFunSuite {
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
-  }
-
-  private def sslDisabledConf(): (SparkConf, SSLOptions) = {
-    val conf = new SparkConf
-    (conf, new SecurityManager(conf).getSSLOptions("ui"))
-  }
-
-  private def sslEnabledConf(sslPort: Option[Int] = None): (SparkConf, SSLOptions) = {
-    val keyStoreFilePath = getTestResourcePath("spark.keystore")
-    val conf = new SparkConf()
-      .set("spark.ssl.ui.enabled", "true")
-      .set("spark.ssl.ui.keyStore", keyStoreFilePath)
-      .set("spark.ssl.ui.keyStorePassword", "123456")
-      .set("spark.ssl.ui.keyPassword", "123456")
-    sslPort.foreach { p =>
-      conf.set("spark.ssl.ui.port", p.toString)
-    }
-    (conf, new SecurityManager(conf).getSSLOptions("ui"))
   }
 
   ignore("basic ui visibility") {
@@ -300,11 +288,21 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  def stopServer(info: ServerInfo): Unit = {
-    if (info != null) info.stop()
+  private def sslDisabledConf(): (SparkConf, SSLOptions) = {
+    val conf = new SparkConf
+    (conf, new SecurityManager(conf).getSSLOptions("ui"))
   }
 
-  def closeSocket(socket: ServerSocket): Unit = {
-    if (socket != null) socket.close
+  private def sslEnabledConf(sslPort: Option[Int] = None): (SparkConf, SSLOptions) = {
+    val keyStoreFilePath = getTestResourcePath("spark.keystore")
+    val conf = new SparkConf()
+      .set("spark.ssl.ui.enabled", "true")
+      .set("spark.ssl.ui.keyStore", keyStoreFilePath)
+      .set("spark.ssl.ui.keyStorePassword", "123456")
+      .set("spark.ssl.ui.keyPassword", "123456")
+    sslPort.foreach { p =>
+      conf.set("spark.ssl.ui.port", p.toString)
+    }
+    (conf, new SecurityManager(conf).getSSLOptions("ui"))
   }
 }

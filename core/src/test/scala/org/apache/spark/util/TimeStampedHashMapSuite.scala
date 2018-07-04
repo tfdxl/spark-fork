@@ -52,7 +52,7 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
     Thread.sleep(10)
     val threshTime1 = System.currentTimeMillis
     Thread.sleep(10)
-    assert(map1("k2") === "v2")     // access k2 to update its access time to > threshTime
+    assert(map1("k2") === "v2") // access k2 to update its access time to > threshTime
     assert(map1.getTimestamp("k1").isDefined)
     assert(map1.getTimestamp("k1").get < threshTime1)
     assert(map1.getTimestamp("k2").isDefined)
@@ -65,6 +65,7 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
   /** Test basic operations of a Scala mutable Map. */
   def testMap(hashMapConstructor: => mutable.Map[String, String]) {
     def newMap() = hashMapConstructor
+
     val testMap1 = newMap()
     val testMap2 = newMap()
     val name = testMap1.getClass.getSimpleName
@@ -136,6 +137,7 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
   /** Test thread safety of a Scala mutable map. */
   def testMapThreadSafety(hashMapConstructor: => mutable.Map[String, String]) {
     def newMap() = hashMapConstructor
+
     val name = newMap().getClass.getSimpleName
     val testMap = newMap()
     @volatile var error = false
@@ -170,7 +172,7 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
       }
     })
 
-    test(name + " - threading safety test")  {
+    test(name + " - threading safety test") {
       threads.foreach(_.start())
       threads.foreach(_.join())
       assert(!error)

@@ -18,24 +18,24 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
 /**
- * Fetches and reads the partitions in range [startPartition, endPartition) from a shuffle by
- * requesting them from other nodes' block stores.
- */
+  * Fetches and reads the partitions in range [startPartition, endPartition) from a shuffle by
+  * requesting them from other nodes' block stores.
+  */
 private[spark] class BlockStoreShuffleReader[K, C](
-    handle: BaseShuffleHandle[K, _, C],
-    startPartition: Int,
-    endPartition: Int,
-    context: TaskContext,
-    serializerManager: SerializerManager = SparkEnv.get.serializerManager,
-    blockManager: BlockManager = SparkEnv.get.blockManager,
-    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
+                                                    handle: BaseShuffleHandle[K, _, C],
+                                                    startPartition: Int,
+                                                    endPartition: Int,
+                                                    context: TaskContext,
+                                                    serializerManager: SerializerManager = SparkEnv.get.serializerManager,
+                                                    blockManager: BlockManager = SparkEnv.get.blockManager,
+                                                    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
   extends ShuffleReader[K, C] with Logging {
 
   private val dep = handle.dependency

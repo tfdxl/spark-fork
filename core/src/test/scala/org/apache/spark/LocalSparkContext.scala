@@ -18,12 +18,11 @@
 package org.apache.spark
 
 import _root_.io.netty.util.internal.logging.{InternalLoggerFactory, Slf4JLoggerFactory}
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.BeforeAndAfterEach
-import org.scalatest.Suite
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Suite}
 
 /** Manages a local `sc` `SparkContext` variable, correctly stopping it after each test. */
-trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
+trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll {
+  self: Suite =>
 
   @transient var sc: SparkContext = _
 
@@ -48,14 +47,6 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
 }
 
 object LocalSparkContext {
-  def stop(sc: SparkContext) {
-    if (sc != null) {
-      sc.stop()
-    }
-    // To avoid RPC rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
-  }
-
   /** Runs `f` by passing in `sc` and ensures that `sc` is stopped. */
   def withSpark[T](sc: SparkContext)(f: SparkContext => T): T = {
     try {
@@ -63,6 +54,14 @@ object LocalSparkContext {
     } finally {
       stop(sc)
     }
+  }
+
+  def stop(sc: SparkContext) {
+    if (sc != null) {
+      sc.stop()
+    }
+    // To avoid RPC rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.driver.port")
   }
 
 }

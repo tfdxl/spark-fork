@@ -17,21 +17,21 @@
 
 package org.apache.spark.storage
 
-import scala.collection.Iterable
-import scala.collection.generic.CanBuildFrom
-import scala.concurrent.Future
-
-import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
+import org.apache.spark.{SparkConf, SparkException}
+
+import scala.collection.Iterable
+import scala.collection.generic.CanBuildFrom
+import scala.concurrent.Future
 
 private[spark]
 class BlockManagerMaster(
-    var driverEndpoint: RpcEndpointRef,
-    conf: SparkConf,
-    isDriver: Boolean)
+                          var driverEndpoint: RpcEndpointRef,
+                          conf: SparkConf,
+                          isDriver: Boolean)
   extends Logging {
 
   val timeout = RpcUtils.askRpcTimeout(conf)
@@ -42,24 +42,31 @@ class BlockManagerMaster(
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
 
+  /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
+  private def tell(message: Any) {
+    if (!driverEndpoint.askSync[Boolean](message)) {
+      throw new SparkException("BlockManagerMasterEndpoint returned false, expected true.")
+    }
+  }
+
   /** Request removal of a dead executor from the driver endpoint.
-   *  This is only called on the driver side. Non-blocking
-   */
+    * This is only called on the driver side. Non-blocking
+    */
   def removeExecutorAsync(execId: String) {
     driverEndpoint.ask[Boolean](RemoveExecutor(execId))
     logInfo("Removal of executor " + execId + " requested")
   }
 
   /**
-   * Register the BlockManager's id with the driver. The input BlockManagerId does not contain
-   * topology information. This information is obtained from the master and we respond with an
-   * updated BlockManagerId fleshed out with this information.
-   */
+    * Register the BlockManager's id with the driver. The input BlockManagerId does not contain
+    * topology information. This information is obtained from the master and we respond with an
+    * updated BlockManagerId fleshed out with this information.
+    */
   def registerBlockManager(
-      blockManagerId: BlockManagerId,
-      maxOnHeapMemSize: Long,
-      maxOffHeapMemSize: Long,
-      slaveEndpoint: RpcEndpointRef): BlockManagerId = {
+                            blockManagerId: BlockManagerId,
+                            maxOnHeapMemSize: Long,
+                            maxOffHeapMemSize: Long,
+                            slaveEndpoint: RpcEndpointRef): BlockManagerId = {
     logInfo(s"Registering BlockManager $blockManagerId")
     val updatedId = driverEndpoint.askSync[BlockManagerId](
       RegisterBlockManager(blockManagerId, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
@@ -68,20 +75,15 @@ class BlockManagerMaster(
   }
 
   def updateBlockInfo(
-      blockManagerId: BlockManagerId,
-      blockId: BlockId,
-      storageLevel: StorageLevel,
-      memSize: Long,
-      diskSize: Long): Boolean = {
+                       blockManagerId: BlockManagerId,
+                       blockId: BlockId,
+                       storageLevel: StorageLevel,
+                       memSize: Long,
+                       diskSize: Long): Boolean = {
     val res = driverEndpoint.askSync[Boolean](
       UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize))
     logDebug(s"Updated info of block $blockId")
     res
-  }
-
-  /** Get locations of the blockId from the driver */
-  def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
-    driverEndpoint.askSync[Seq[BlockManagerId]](GetLocations(blockId))
   }
 
   /** Get locations as well as status of the blockId from the driver */
@@ -97,11 +99,16 @@ class BlockManagerMaster(
   }
 
   /**
-   * Check if block manager master has a block. Note that this can be used to check for only
-   * those blocks that are reported to block manager master.
-   */
+    * Check if block manager master has a block. Note that this can be used to check for only
+    * those blocks that are reported to block manager master.
+    */
   def contains(blockId: BlockId): Boolean = {
     !getLocations(blockId).isEmpty
+  }
+
+  /** Get locations of the blockId from the driver */
+  def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
+    driverEndpoint.askSync[Seq[BlockManagerId]](GetLocations(blockId))
   }
 
   /** Get ids of other nodes in the cluster from the driver */
@@ -114,9 +121,9 @@ class BlockManagerMaster(
   }
 
   /**
-   * Remove a block from the slaves that have it. This can only be used to remove
-   * blocks that the driver knows about.
-   */
+    * Remove a block from the slaves that have it. This can only be used to remove
+    * blocks that the driver knows about.
+    */
   def removeBlock(blockId: BlockId) {
     driverEndpoint.askSync[Boolean](RemoveBlock(blockId))
   }
@@ -157,11 +164,11 @@ class BlockManagerMaster(
   }
 
   /**
-   * Return the memory status for each block manager, in the form of a map from
-   * the block manager's id to two long values. The first value is the maximum
-   * amount of memory allocated for the block manager, while the second is the
-   * amount of remaining memory.
-   */
+    * Return the memory status for each block manager, in the form of a map from
+    * the block manager's id to two long values. The first value is the maximum
+    * amount of memory allocated for the block manager, while the second is the
+    * amount of remaining memory.
+    */
   def getMemoryStatus: Map[BlockManagerId, (Long, Long)] = {
     driverEndpoint.askSync[Map[BlockManagerId, (Long, Long)]](GetMemoryStatus)
   }
@@ -171,16 +178,16 @@ class BlockManagerMaster(
   }
 
   /**
-   * Return the block's status on all block managers, if any. NOTE: This is a
-   * potentially expensive operation and should only be used for testing.
-   *
-   * If askSlaves is true, this invokes the master to query each block manager for the most
-   * updated block statuses. This is useful when the master is not informed of the given block
-   * by all block managers.
-   */
+    * Return the block's status on all block managers, if any. NOTE: This is a
+    * potentially expensive operation and should only be used for testing.
+    *
+    * If askSlaves is true, this invokes the master to query each block manager for the most
+    * updated block statuses. This is useful when the master is not informed of the given block
+    * by all block managers.
+    */
   def getBlockStatus(
-      blockId: BlockId,
-      askSlaves: Boolean = true): Map[BlockManagerId, BlockStatus] = {
+                      blockId: BlockId,
+                      askSlaves: Boolean = true): Map[BlockManagerId, BlockStatus] = {
     val msg = GetBlockStatus(blockId, askSlaves)
     /*
      * To avoid potential deadlocks, the use of Futures is necessary, because the master endpoint
@@ -194,8 +201,8 @@ class BlockManagerMaster(
     val cbf =
       implicitly[
         CanBuildFrom[Iterable[Future[Option[BlockStatus]]],
-        Option[BlockStatus],
-        Iterable[Option[BlockStatus]]]]
+          Option[BlockStatus],
+          Iterable[Option[BlockStatus]]]]
     val blockStatus = timeout.awaitResult(
       Future.sequence[Option[BlockStatus], Iterable](futures)(cbf, ThreadUtils.sameThread))
     if (blockStatus == null) {
@@ -207,25 +214,25 @@ class BlockManagerMaster(
   }
 
   /**
-   * Return a list of ids of existing blocks such that the ids match the given filter. NOTE: This
-   * is a potentially expensive operation and should only be used for testing.
-   *
-   * If askSlaves is true, this invokes the master to query each block manager for the most
-   * updated block statuses. This is useful when the master is not informed of the given block
-   * by all block managers.
-   */
+    * Return a list of ids of existing blocks such that the ids match the given filter. NOTE: This
+    * is a potentially expensive operation and should only be used for testing.
+    *
+    * If askSlaves is true, this invokes the master to query each block manager for the most
+    * updated block statuses. This is useful when the master is not informed of the given block
+    * by all block managers.
+    */
   def getMatchingBlockIds(
-      filter: BlockId => Boolean,
-      askSlaves: Boolean): Seq[BlockId] = {
+                           filter: BlockId => Boolean,
+                           askSlaves: Boolean): Seq[BlockId] = {
     val msg = GetMatchingBlockIds(filter, askSlaves)
     val future = driverEndpoint.askSync[Future[Seq[BlockId]]](msg)
     timeout.awaitResult(future)
   }
 
   /**
-   * Find out if the executor has cached blocks. This method does not consider broadcast blocks,
-   * since they are not reported the master.
-   */
+    * Find out if the executor has cached blocks. This method does not consider broadcast blocks,
+    * since they are not reported the master.
+    */
   def hasCachedBlocks(executorId: String): Boolean = {
     driverEndpoint.askSync[Boolean](HasCachedBlocks(executorId))
   }
@@ -236,13 +243,6 @@ class BlockManagerMaster(
       tell(StopBlockManagerMaster)
       driverEndpoint = null
       logInfo("BlockManagerMaster stopped")
-    }
-  }
-
-  /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
-  private def tell(message: Any) {
-    if (!driverEndpoint.askSync[Boolean](message)) {
-      throw new SparkException("BlockManagerMasterEndpoint returned false, expected true.")
     }
   }
 

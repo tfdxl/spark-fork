@@ -20,13 +20,12 @@ package org.apache.spark.util
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
+import org.apache.spark.SparkFunSuite
+import org.scalatest.concurrent.Eventually._
+
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Random
-
-import org.scalatest.concurrent.Eventually._
-
-import org.apache.spark.SparkFunSuite
 
 class ThreadUtilsSuite extends SparkFunSuite {
 
@@ -115,14 +114,22 @@ class ThreadUtilsSuite extends SparkFunSuite {
 
   test("runInNewThread") {
     import ThreadUtils._
-    assert(runInNewThread("thread-name") { Thread.currentThread().getName } === "thread-name")
-    assert(runInNewThread("thread-name") { Thread.currentThread().isDaemon } === true)
+    assert(runInNewThread("thread-name") {
+      Thread.currentThread().getName
+    } === "thread-name")
+    assert(runInNewThread("thread-name") {
+      Thread.currentThread().isDaemon
+    } === true)
     assert(
-      runInNewThread("thread-name", isDaemon = false) { Thread.currentThread().isDaemon } === false
+      runInNewThread("thread-name", isDaemon = false) {
+        Thread.currentThread().isDaemon
+      } === false
     )
     val uniqueExceptionMessage = "test" + Random.nextInt()
     val exception = intercept[IllegalArgumentException] {
-      runInNewThread("thread-name") { throw new IllegalArgumentException(uniqueExceptionMessage) }
+      runInNewThread("thread-name") {
+        throw new IllegalArgumentException(uniqueExceptionMessage)
+      }
     }
     assert(exception.asInstanceOf[IllegalArgumentException].getMessage === uniqueExceptionMessage)
     assert(exception.getStackTrace.mkString("\n").contains(

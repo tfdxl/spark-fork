@@ -20,44 +20,41 @@ package org.apache.spark.scheduler
 import java.nio.ByteBuffer
 import java.util.concurrent.{ExecutorService, RejectedExecutionException}
 
-import scala.language.existentials
-import scala.util.control.NonFatal
-
-import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{LongAccumulator, ThreadUtils, Utils}
 
+import scala.language.existentials
+import scala.util.control.NonFatal
+
 /**
- * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
- */
+  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
+  */
 private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedulerImpl)
   extends Logging {
-
-  private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4)
 
   // Exposed for testing.
   protected val getTaskResultExecutor: ExecutorService =
     ThreadUtils.newDaemonFixedThreadPool(THREADS, "task-result-getter")
-
   // Exposed for testing.
   protected val serializer = new ThreadLocal[SerializerInstance] {
     override def initialValue(): SerializerInstance = {
       sparkEnv.closureSerializer.newInstance()
     }
   }
-
   protected val taskResultSerializer = new ThreadLocal[SerializerInstance] {
     override def initialValue(): SerializerInstance = {
       sparkEnv.serializer.newInstance()
     }
   }
+  private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4)
 
   def enqueueSuccessfulTask(
-      taskSetManager: TaskSetManager,
-      tid: Long,
-      serializedData: ByteBuffer): Unit = {
+                             taskSetManager: TaskSetManager,
+                             tid: Long,
+                             serializedData: ByteBuffer): Unit = {
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
         try {
@@ -125,8 +122,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   }
 
   def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
-    serializedData: ByteBuffer) {
-    var reason : TaskFailedReason = UnknownReason
+                        serializedData: ByteBuffer) {
+    var reason: TaskFailedReason = UnknownReason
     try {
       getTaskResultExecutor.execute(new Runnable {
         override def run(): Unit = Utils.logUncaughtExceptions {
@@ -153,7 +150,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
       })
     } catch {
       case e: RejectedExecutionException if sparkEnv.isStopped =>
-        // ignore it
+      // ignore it
     }
   }
 

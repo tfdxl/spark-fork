@@ -17,56 +17,55 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{EOFException, InputStream, IOException}
-
-import scala.io.Source
+import java.io.{EOFException, IOException, InputStream}
 
 import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ReplayListenerBus._
 import org.apache.spark.util.JsonProtocol
+import org.json4s.jackson.JsonMethods._
+
+import scala.io.Source
 
 /**
- * A SparkListenerBus that can be used to replay events from serialized event data.
- */
+  * A SparkListenerBus that can be used to replay events from serialized event data.
+  */
 private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
 
   /**
-   * Replay each event in the order maintained in the given stream. The stream is expected to
-   * contain one JSON-encoded SparkListenerEvent per line.
-   *
-   * This method can be called multiple times, but the listener behavior is undefined after any
-   * error is thrown by this method.
-   *
-   * @param logData Stream containing event log data.
-   * @param sourceName Filename (or other source identifier) from whence @logData is being read
-   * @param maybeTruncated Indicate whether log file might be truncated (some abnormal situations
-   *        encountered, log file might not finished writing) or not
-   * @param eventsFilter Filter function to select JSON event strings in the log data stream that
-   *        should be parsed and replayed. When not specified, all event strings in the log data
-   *        are parsed and replayed.
-   */
+    * Replay each event in the order maintained in the given stream. The stream is expected to
+    * contain one JSON-encoded SparkListenerEvent per line.
+    *
+    * This method can be called multiple times, but the listener behavior is undefined after any
+    * error is thrown by this method.
+    *
+    * @param logData        Stream containing event log data.
+    * @param sourceName     Filename (or other source identifier) from whence @logData is being read
+    * @param maybeTruncated Indicate whether log file might be truncated (some abnormal situations
+    *                       encountered, log file might not finished writing) or not
+    * @param eventsFilter   Filter function to select JSON event strings in the log data stream that
+    *                       should be parsed and replayed. When not specified, all event strings in the log data
+    *                       are parsed and replayed.
+    */
   def replay(
-      logData: InputStream,
-      sourceName: String,
-      maybeTruncated: Boolean = false,
-      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
+              logData: InputStream,
+              sourceName: String,
+              maybeTruncated: Boolean = false,
+              eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): Unit = {
     val lines = Source.fromInputStream(logData).getLines()
     replay(lines, sourceName, maybeTruncated, eventsFilter)
   }
 
   /**
-   * Overloaded variant of [[replay()]] which accepts an iterator of lines instead of an
-   * [[InputStream]]. Exposed for use by custom ApplicationHistoryProvider implementations.
-   */
+    * Overloaded variant of [[replay()]] which accepts an iterator of lines instead of an
+    * [[InputStream]]. Exposed for use by custom ApplicationHistoryProvider implementations.
+    */
   def replay(
-      lines: Iterator[String],
-      sourceName: String,
-      maybeTruncated: Boolean,
-      eventsFilter: ReplayEventsFilter): Unit = {
+              lines: Iterator[String],
+              sourceName: String,
+              maybeTruncated: Boolean,
+              eventsFilter: ReplayEventsFilter): Unit = {
     var currentLine: String = null
     var lineNumber: Int = 0
     val unrecognizedEvents = new scala.collection.mutable.HashSet[String]
@@ -116,7 +115,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
       }
     } catch {
       case e: HaltReplayException =>
-        // Just stop replay.
+      // Just stop replay.
       case _: EOFException if maybeTruncated =>
       case ioe: IOException =>
         throw ioe
@@ -133,9 +132,9 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
 }
 
 /**
- * Exception that can be thrown by listeners to halt replay. This is handled by ReplayListenerBus
- * only, and will cause errors if thrown when using other bus implementations.
- */
+  * Exception that can be thrown by listeners to halt replay. This is handled by ReplayListenerBus
+  * only, and will cause errors if thrown when using other bus implementations.
+  */
 private[spark] class HaltReplayException extends RuntimeException
 
 private[spark] object ReplayListenerBus {

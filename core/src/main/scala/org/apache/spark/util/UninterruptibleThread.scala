@@ -20,50 +20,50 @@ package org.apache.spark.util
 import javax.annotation.concurrent.GuardedBy
 
 /**
- * A special Thread that provides "runUninterruptibly" to allow running codes without being
- * interrupted by `Thread.interrupt()`. If `Thread.interrupt()` is called during runUninterruptibly
- * is running, it won't set the interrupted status. Instead, setting the interrupted status will be
- * deferred until it's returning from "runUninterruptibly".
- *
- * Note: "runUninterruptibly" should be called only in `this` thread.
- */
+  * A special Thread that provides "runUninterruptibly" to allow running codes without being
+  * interrupted by `Thread.interrupt()`. If `Thread.interrupt()` is called during runUninterruptibly
+  * is running, it won't set the interrupted status. Instead, setting the interrupted status will be
+  * deferred until it's returning from "runUninterruptibly".
+  *
+  * Note: "runUninterruptibly" should be called only in `this` thread.
+  */
 private[spark] class UninterruptibleThread(
-    target: Runnable,
-    name: String) extends Thread(target, name) {
+                                            target: Runnable,
+                                            name: String) extends Thread(target, name) {
+
+  /** A monitor to protect "uninterruptible" and "interrupted" */
+  private val uninterruptibleLock = new Object
+  /**
+    * Indicates if `this`  thread are in the uninterruptible status. If so, interrupting
+    * "this" will be deferred until `this`  enters into the interruptible status.
+    */
+  @GuardedBy("uninterruptibleLock")
+  private var uninterruptible = false
+  /**
+    * Indicates if we should interrupt `this` when we are leaving the uninterruptible zone.
+    */
+  @GuardedBy("uninterruptibleLock")
+  private var shouldInterruptThread = false
 
   def this(name: String) {
     this(null, name)
   }
 
-  /** A monitor to protect "uninterruptible" and "interrupted" */
-  private val uninterruptibleLock = new Object
-
   /**
-   * Indicates if `this`  thread are in the uninterruptible status. If so, interrupting
-   * "this" will be deferred until `this`  enters into the interruptible status.
-   */
-  @GuardedBy("uninterruptibleLock")
-  private var uninterruptible = false
-
-  /**
-   * Indicates if we should interrupt `this` when we are leaving the uninterruptible zone.
-   */
-  @GuardedBy("uninterruptibleLock")
-  private var shouldInterruptThread = false
-
-  /**
-   * Run `f` uninterruptibly in `this` thread. The thread won't be interrupted before returning
-   * from `f`.
-   *
-   * Note: this method should be called only in `this` thread.
-   */
+    * Run `f` uninterruptibly in `this` thread. The thread won't be interrupted before returning
+    * from `f`.
+    *
+    * Note: this method should be called only in `this` thread.
+    */
   def runUninterruptibly[T](f: => T): T = {
     if (Thread.currentThread() != this) {
       throw new IllegalStateException(s"Call runUninterruptibly in a wrong thread. " +
         s"Expected: $this but was ${Thread.currentThread()}")
     }
 
-    if (uninterruptibleLock.synchronized { uninterruptible }) {
+    if (uninterruptibleLock.synchronized {
+      uninterruptible
+    }) {
       // We are already in the uninterruptible status. So just run "f" and return
       return f
     }
@@ -88,9 +88,9 @@ private[spark] class UninterruptibleThread(
   }
 
   /**
-   * Interrupt `this` thread if possible. If `this` is in the uninterruptible status, it won't be
-   * interrupted until it enters into the interruptible status.
-   */
+    * Interrupt `this` thread if possible. If `this` is in the uninterruptible status, it won't be
+    * interrupted until it enters into the interruptible status.
+    */
   override def interrupt(): Unit = {
     uninterruptibleLock.synchronized {
       if (uninterruptible) {

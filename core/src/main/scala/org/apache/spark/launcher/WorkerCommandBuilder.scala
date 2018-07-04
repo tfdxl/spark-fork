@@ -20,20 +20,22 @@ package org.apache.spark.launcher
 import java.io.File
 import java.util.{HashMap => JHashMap, List => JList, Map => JMap}
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.deploy.Command
 
+import scala.collection.JavaConverters._
+
 /**
- * This class is used by CommandUtils. It uses some package-private APIs in SparkLauncher, and since
- * Java doesn't have a feature similar to `private[spark]`, and we don't want that class to be
- * public, needs to live in the same package as the rest of the library.
- */
+  * This class is used by CommandUtils. It uses some package-private APIs in SparkLauncher, and since
+  * Java doesn't have a feature similar to `private[spark]`, and we don't want that class to be
+  * public, needs to live in the same package as the rest of the library.
+  */
 private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, command: Command)
-    extends AbstractCommandBuilder {
+  extends AbstractCommandBuilder {
 
   childEnv.putAll(command.environment.asJava)
   childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, sparkHome)
+
+  def buildCommand(): JList[String] = buildCommand(new JHashMap[String, String]())
 
   override def buildCommand(env: JMap[String, String]): JList[String] = {
     val cmd = buildJavaCommand(command.classPathEntries.mkString(File.pathSeparator))
@@ -41,7 +43,5 @@ private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, comm
     command.javaOpts.foreach(cmd.add)
     cmd
   }
-
-  def buildCommand(): JList[String] = buildCommand(new JHashMap[String, String]())
 
 }

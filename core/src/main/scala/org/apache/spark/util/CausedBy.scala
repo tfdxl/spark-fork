@@ -18,16 +18,16 @@
 package org.apache.spark.util
 
 /**
- * Extractor Object for pulling out the root cause of an error.
- * If the error contains no cause, it will return the error itself.
- *
- * Usage:
- * try {
- *   ...
- * } catch {
- *   case CausedBy(ex: CommitDeniedException) => ...
- * }
- */
+  * Extractor Object for pulling out the root cause of an error.
+  * If the error contains no cause, it will return the error itself.
+  *
+  * Usage:
+  * try {
+  * ...
+  * } catch {
+  * case CausedBy(ex: CommitDeniedException) => ...
+  * }
+  */
 private[spark] object CausedBy {
 
   def unapply(e: Throwable): Option[Throwable] = {

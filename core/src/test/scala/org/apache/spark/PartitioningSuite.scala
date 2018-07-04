@@ -17,13 +17,12 @@
 
 package org.apache.spark
 
-import scala.collection.mutable.ArrayBuffer
-import scala.math.abs
-
-import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.StatCounter
+import org.scalatest.PrivateMethodTester
+
+import scala.collection.mutable.ArrayBuffer
+import scala.math.abs
 
 class PartitioningSuite extends SparkFunSuite with SharedSparkContext with PrivateMethodTester {
 
@@ -182,11 +181,11 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     assert(reduced2.partitioner === Some(new HashPartitioner(2)))
     assert(reduced4.partitioner === Some(new HashPartitioner(4)))
 
-    assert(grouped2.groupByKey().partitioner  === grouped2.partitioner)
-    assert(grouped2.groupByKey(3).partitioner !=  grouped2.partitioner)
+    assert(grouped2.groupByKey().partitioner === grouped2.partitioner)
+    assert(grouped2.groupByKey(3).partitioner != grouped2.partitioner)
     assert(grouped2.groupByKey(2).partitioner === grouped2.partitioner)
-    assert(grouped4.groupByKey().partitioner  === grouped4.partitioner)
-    assert(grouped4.groupByKey(3).partitioner !=  grouped4.partitioner)
+    assert(grouped4.groupByKey().partitioner === grouped4.partitioner)
+    assert(grouped4.groupByKey(3).partitioner != grouped4.partitioner)
     assert(grouped4.groupByKey(4).partitioner === grouped4.partitioner)
 
     assert(grouped2.join(grouped4).partitioner === grouped4.partitioner)
@@ -235,13 +234,13 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
   test("zero-length partitions should be correctly handled") {
     // Create RDD with some consecutive empty partitions (including the "first" one)
     val rdd: RDD[Double] = sc
-        .parallelize(Array(-1.0, -1.0, -1.0, -1.0, 2.0, 4.0, -1.0, -1.0), 8)
-        .filter(_ >= 0.0)
+      .parallelize(Array(-1.0, -1.0, -1.0, -1.0, 2.0, 4.0, -1.0, -1.0), 8)
+      .filter(_ >= 0.0)
 
     // Run the partitions, including the consecutive empty ones, through StatCounter
     val stats: StatCounter = rdd.stats()
     assert(abs(6.0 - stats.sum) < 0.01)
-    assert(abs(6.0/2 - rdd.mean) < 0.01)
+    assert(abs(6.0 / 2 - rdd.mean) < 0.01)
     assert(abs(1.0 - rdd.variance) < 0.01)
     assert(abs(1.0 - rdd.stdev) < 0.01)
     assert(abs(rdd.variance - rdd.popVariance) < 1e-14)

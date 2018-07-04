@@ -19,17 +19,17 @@ package org.apache.spark.deploy
 
 import java.net.{URI, URISyntaxException}
 
+import org.apache.log4j.Level
+import org.apache.spark.util.{IntParam, MemoryParam, Utils}
+
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 
-import org.apache.log4j.Level
-
-import org.apache.spark.util.{IntParam, MemoryParam, Utils}
-
 /**
- * Command-line parser for the driver client.
- */
+  * Command-line parser for the driver client.
+  */
 private[deploy] class ClientArguments(args: Array[String]) {
+
   import ClientArguments._
 
   var cmd: String = "" // 'launch' or 'kill'
@@ -42,11 +42,11 @@ private[deploy] class ClientArguments(args: Array[String]) {
   var supervise: Boolean = DEFAULT_SUPERVISE
   var memory: Int = DEFAULT_MEMORY
   var cores: Int = DEFAULT_CORES
-  private var _driverOptions = ListBuffer[String]()
-  def driverOptions: Seq[String] = _driverOptions.toSeq
-
   // kill parameters
   var driverId: String = ""
+  private var _driverOptions = ListBuffer[String]()
+
+  def driverOptions: Seq[String] = _driverOptions.toSeq
 
   parse(args.toList)
 
@@ -98,22 +98,22 @@ private[deploy] class ClientArguments(args: Array[String]) {
   }
 
   /**
-   * Print usage and exit JVM with the given exit code.
-   */
+    * Print usage and exit JVM with the given exit code.
+    */
   private def printUsageAndExit(exitCode: Int) {
     // TODO: It wouldn't be too hard to allow users to submit their app and dependency jars
     //       separately similar to in the YARN client.
     val usage =
-     s"""
-      |Usage: DriverClient [options] launch <active-master> <jar-url> <main-class> [driver options]
-      |Usage: DriverClient kill <active-master> <driver-id>
-      |
+    s"""
+       |Usage: DriverClient [options] launch <active-master> <jar-url> <main-class> [driver options]
+       |Usage: DriverClient kill <active-master> <driver-id>
+       |
       |Options:
-      |   -c CORES, --cores CORES        Number of cores to request (default: $DEFAULT_CORES)
-      |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $DEFAULT_MEMORY)
-      |   -s, --supervise                Whether to restart the driver on failure
-      |                                  (default: $DEFAULT_SUPERVISE)
-      |   -v, --verbose                  Print more debugging output
+       |   -c CORES, --cores CORES        Number of cores to request (default: $DEFAULT_CORES)
+       |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $DEFAULT_MEMORY)
+       |   -s, --supervise                Whether to restart the driver on failure
+       |                                  (default: $DEFAULT_SUPERVISE)
+       |   -v, --verbose                  Print more debugging output
      """.stripMargin
     // scalastyle:off println
     System.err.println(usage)

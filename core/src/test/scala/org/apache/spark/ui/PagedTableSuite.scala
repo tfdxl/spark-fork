@@ -17,9 +17,9 @@
 
 package org.apache.spark.ui
 
-import scala.xml.Node
-
 import org.apache.spark.SparkFunSuite
+
+import scala.xml.Node
 
 class PagedDataSourceSuite extends SparkFunSuite {
 

@@ -17,26 +17,25 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.JavaConverters._
-import scala.collection.immutable.Set
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.util.ReflectionUtils
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 
+import scala.collection.JavaConverters._
+import scala.collection.immutable.Set
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+
 /**
- * :: DeveloperApi ::
- * Parses and holds information about inputFormat (and files) specified as a parameter.
- */
+  * :: DeveloperApi ::
+  * Parses and holds information about inputFormat (and files) specified as a parameter.
+  */
 @DeveloperApi
 class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Class[_],
-    val path: String) extends Logging {
+                      val path: String) extends Logging {
 
   var mapreduceInputFormat: Boolean = false
   var mapredInputFormat: Boolean = false
@@ -81,7 +80,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
       else {
         throw new IllegalArgumentException("Specified inputformat " + inputFormatClazz +
           " is NOT a supported input format ? does not implement either of the supported hadoop " +
-            "api's")
+          "api's")
       }
     }
     catch {
@@ -91,6 +90,17 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     }
   }
 
+  private def findPreferredLocations(): Set[SplitInfo] = {
+    logDebug("mapreduceInputFormat : " + mapreduceInputFormat + ", mapredInputFormat : " +
+      mapredInputFormat + ", inputFormatClazz : " + inputFormatClazz)
+    if (mapreduceInputFormat) {
+      prefLocsFromMapreduceInputFormat()
+    }
+    else {
+      assert(mapredInputFormat)
+      prefLocsFromMapredInputFormat()
+    }
+  }
 
   // This method does not expect failures, since validate has already passed ...
   private def prefLocsFromMapreduceInputFormat(): Set[SplitInfo] = {
@@ -124,47 +134,33 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
 
     val retval = new ArrayBuffer[SplitInfo]()
     instance.getSplits(jobConf, jobConf.getNumMapTasks()).foreach(
-        elem => retval ++= SplitInfo.toSplitInfo(inputFormatClazz, path, elem)
+      elem => retval ++= SplitInfo.toSplitInfo(inputFormatClazz, path, elem)
     )
 
     retval.toSet
-   }
-
-  private def findPreferredLocations(): Set[SplitInfo] = {
-    logDebug("mapreduceInputFormat : " + mapreduceInputFormat + ", mapredInputFormat : " +
-      mapredInputFormat + ", inputFormatClazz : " + inputFormatClazz)
-    if (mapreduceInputFormat) {
-      prefLocsFromMapreduceInputFormat()
-    }
-    else {
-      assert(mapredInputFormat)
-      prefLocsFromMapredInputFormat()
-    }
   }
 }
 
 
-
-
 object InputFormatInfo {
   /**
-    Computes the preferred locations based on input(s) and returned a location to block map.
-    Typical use of this method for allocation would follow some algo like this:
-
-    a) For each host, count number of splits hosted on that host.
-    b) Decrement the currently allocated containers on that host.
-    c) Compute rack info for each host and update rack to count map based on (b).
-    d) Allocate nodes based on (c)
-    e) On the allocation result, ensure that we don't allocate "too many" jobs on a single node
-       (even if data locality on that is very high) : this is to prevent fragility of job if a
-       single (or small set of) hosts go down.
-
-    go to (a) until required nodes are allocated.
-
-    If a node 'dies', follow same procedure.
-
-    PS: I know the wording here is weird, hopefully it makes some sense !
-  */
+    * Computes the preferred locations based on input(s) and returned a location to block map.
+    * Typical use of this method for allocation would follow some algo like this:
+    * *
+    * a) For each host, count number of splits hosted on that host.
+    * b) Decrement the currently allocated containers on that host.
+    * c) Compute rack info for each host and update rack to count map based on (b).
+    * d) Allocate nodes based on (c)
+    * e) On the allocation result, ensure that we don't allocate "too many" jobs on a single node
+    * (even if data locality on that is very high) : this is to prevent fragility of job if a
+    * single (or small set of) hosts go down.
+    * *
+    * go to (a) until required nodes are allocated.
+    * *
+    * If a node 'dies', follow same procedure.
+    * *
+    * PS: I know the wording here is weird, hopefully it makes some sense !
+    */
   def computePreferredLocations(formats: Seq[InputFormatInfo]): Map[String, Set[SplitInfo]] = {
 
     val nodeToSplit = new HashMap[String, HashSet[SplitInfo]]

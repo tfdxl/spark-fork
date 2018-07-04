@@ -20,14 +20,14 @@ package org.apache.spark.scheduler
 import org.apache.spark.util.ListenerBus
 
 /**
- * A [[SparkListenerEvent]] bus that relays [[SparkListenerEvent]]s to its listeners
- */
+  * A [[SparkListenerEvent]] bus that relays [[SparkListenerEvent]]s to its listeners
+  */
 private[spark] trait SparkListenerBus
   extends ListenerBus[SparkListenerInterface, SparkListenerEvent] {
 
   protected override def doPostEvent(
-      listener: SparkListenerInterface,
-      event: SparkListenerEvent): Unit = {
+                                      listener: SparkListenerInterface,
+                                      event: SparkListenerEvent): Unit = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         listener.onStageSubmitted(stageSubmitted)

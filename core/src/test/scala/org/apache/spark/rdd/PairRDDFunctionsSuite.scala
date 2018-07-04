@@ -19,22 +19,18 @@ package org.apache.spark.rdd
 
 import java.io.IOException
 
-import scala.collection.mutable.{ArrayBuffer, HashSet}
-import scala.util.Random
-
 import org.apache.commons.math3.distribution.{BinomialDistribution, PoissonDistribution}
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
-import org.apache.hadoop.mapreduce.{Job => NewJob, JobContext => NewJobContext,
-  OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat,
-  RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
+import org.apache.hadoop.mapreduce.{Job => NewJob, JobContext => NewJobContext, OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
 import org.apache.hadoop.util.Progressable
+import org.apache.spark.{Partitioner, _}
+import org.apache.spark.util.Utils
 import org.scalatest.Assertions
 
-import org.apache.spark._
-import org.apache.spark.Partitioner
-import org.apache.spark.util.Utils
+import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.util.Random
 
 class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   test("aggregateByKey") {
@@ -192,6 +188,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   test("reduceByKey with partitioner") {
     val p = new Partitioner() {
       def numPartitions = 2
+
       def getPartition(key: Any) = key.asInstanceOf[Int]
     }
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 1), (0, 1))).partitionBy(p)
@@ -200,12 +197,14 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(sums.partitioner === Some(p))
     // count the dependencies to make sure there is only 1 ShuffledRDD
     val deps = new HashSet[RDD[_]]()
+
     def visit(r: RDD[_]) {
       for (dep <- r.dependencies) {
         deps += dep.rdd
         visit(dep.rdd)
       }
     }
+
     visit(sums)
     assert(deps.size === 2) // ShuffledRDD, ParallelCollection.
   }
@@ -517,6 +516,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     // use a deterministic partitioner
     val p = new Partitioner() {
       def numPartitions = 5
+
       def getPartition(key: Any) = key.asInstanceOf[Int]
     }
     // partitionBy so we have a narrow dependency
@@ -541,6 +541,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     // use a deterministic partitioner
     val p = new Partitioner() {
       def numPartitions = 5
+
       def getPartition(key: Any) = key.asInstanceOf[Int]
     }
     // partitionBy so we have a narrow dependency
@@ -723,68 +724,38 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
 
     assert(shuffled.partitioner === Some(p))
     assert(shuffled.lookup(1) === Seq(2))
-    intercept[IllegalArgumentException] {shuffled.lookup(-1)}
+    intercept[IllegalArgumentException] {
+      shuffled.lookup(-1)
+    }
   }
 
   private object StratifiedAuxiliary {
-    def stratifier (fractionPositive: Double): (Int) => String = {
+    def stratifier(fractionPositive: Double): (Int) => String = {
       (x: Int) => if (x % 10 < (10 * fractionPositive).toInt) "1" else "0"
     }
 
-    def assertBinomialSample(
-        exact: Boolean,
-        actual: Int,
-        trials: Int,
-        p: Double): Unit = {
-      if (exact) {
-        assert(actual == math.ceil(p * trials).toInt)
-      } else {
-        val dist = new BinomialDistribution(trials, p)
-        val q = dist.cumulativeProbability(actual)
-        withClue(s"p = $p: trials = $trials") {
-          assert(q >= 0.001 && q <= 0.999)
-        }
-      }
-    }
-
-    def assertPoissonSample(
-        exact: Boolean,
-        actual: Int,
-        trials: Int,
-        p: Double): Unit = {
-      if (exact) {
-        assert(actual == math.ceil(p * trials).toInt)
-      } else {
-        val dist = new PoissonDistribution(p * trials)
-        val q = dist.cumulativeProbability(actual)
-        withClue(s"p = $p: trials = $trials") {
-          assert(q >= 0.001 && q <= 0.999)
-        }
-      }
-    }
-
     def testSampleExact(stratifiedData: RDD[(String, Int)],
-        samplingRate: Double,
-        seed: Long,
-        n: Long): Unit = {
+                        samplingRate: Double,
+                        seed: Long,
+                        n: Long): Unit = {
       testBernoulli(stratifiedData, true, samplingRate, seed, n)
       testPoisson(stratifiedData, true, samplingRate, seed, n)
     }
 
     def testSample(stratifiedData: RDD[(String, Int)],
-        samplingRate: Double,
-        seed: Long,
-        n: Long): Unit = {
+                   samplingRate: Double,
+                   seed: Long,
+                   n: Long): Unit = {
       testBernoulli(stratifiedData, false, samplingRate, seed, n)
       testPoisson(stratifiedData, false, samplingRate, seed, n)
     }
 
     // Without replacement validation
     def testBernoulli(stratifiedData: RDD[(String, Int)],
-        exact: Boolean,
-        samplingRate: Double,
-        seed: Long,
-        n: Long): Unit = {
+                      exact: Boolean,
+                      samplingRate: Double,
+                      seed: Long,
+                      n: Long): Unit = {
       val trials = stratifiedData.countByKey()
       val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
       val sample = if (exact) {
@@ -802,12 +773,28 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       takeSample.foreach { x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]") }
     }
 
+    def assertBinomialSample(
+                              exact: Boolean,
+                              actual: Int,
+                              trials: Int,
+                              p: Double): Unit = {
+      if (exact) {
+        assert(actual == math.ceil(p * trials).toInt)
+      } else {
+        val dist = new BinomialDistribution(trials, p)
+        val q = dist.cumulativeProbability(actual)
+        withClue(s"p = $p: trials = $trials") {
+          assert(q >= 0.001 && q <= 0.999)
+        }
+      }
+    }
+
     // With replacement validation
     def testPoisson(stratifiedData: RDD[(String, Int)],
-        exact: Boolean,
-        samplingRate: Double,
-        seed: Long,
-        n: Long): Unit = {
+                    exact: Boolean,
+                    samplingRate: Double,
+                    seed: Long,
+                    n: Long): Unit = {
       val trials = stratifiedData.countByKey()
       val expectedSampleSize = stratifiedData.countByKey().mapValues(count =>
         math.ceil(count * samplingRate).toInt)
@@ -836,6 +823,22 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
         }
       }
       takeSample.foreach(x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]"))
+    }
+
+    def assertPoissonSample(
+                             exact: Boolean,
+                             actual: Int,
+                             trials: Int,
+                             p: Double): Unit = {
+      if (exact) {
+        assert(actual == math.ceil(p * trials).toInt)
+      } else {
+        val dist = new PoissonDistribution(p * trials)
+        val q = dist.cumulativeProbability(actual)
+        withClue(s"p = $p: trials = $trials") {
+          assert(q >= 0.001 && q <= 0.999)
+        }
+      }
     }
   }
 
@@ -882,9 +885,9 @@ object FakeOutputCommitter {
 
 class FakeOutputFormat() extends OutputFormat[Integer, Integer]() {
   override def getRecordWriter(
-      ignored: FileSystem,
-      job: JobConf, name: String,
-      progress: Progressable): RecordWriter[Integer, Integer] = {
+                                ignored: FileSystem,
+                                job: JobConf, name: String,
+                                progress: Progressable): RecordWriter[Integer, Integer] = {
     new FakeWriter()
   }
 
@@ -954,9 +957,9 @@ class FakeWriterWithCallback extends FakeWriter {
 
 class FakeFormatWithCallback() extends FakeOutputFormat {
   override def getRecordWriter(
-    ignored: FileSystem,
-    job: JobConf, name: String,
-    progress: Progressable): RecordWriter[Integer, Integer] = {
+                                ignored: FileSystem,
+                                job: JobConf, name: String,
+                                progress: Progressable): RecordWriter[Integer, Integer] = {
     new FakeWriterWithCallback()
   }
 }
@@ -1018,12 +1021,13 @@ object JobID {
 class ConfigTestFormat() extends NewFakeFormat() with Configurable {
 
   var setConfCalled = false
+
+  def getConf: Configuration = null
+
   def setConf(p1: Configuration): Unit = {
     setConfCalled = true
     ()
   }
-
-  def getConf: Configuration = null
 
   override def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     assert(setConfCalled, "setConf was never called")

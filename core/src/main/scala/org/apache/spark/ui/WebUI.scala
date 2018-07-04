@@ -18,63 +18,52 @@
 package org.apache.spark.ui
 
 import javax.servlet.http.HttpServletRequest
-
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.xml.Node
-
-import org.eclipse.jetty.servlet.ServletContextHandler
-import org.json4s.JsonAST.{JNothing, JValue}
-
-import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
+import org.apache.spark.{SSLOptions, SecurityManager, SparkConf}
+import org.eclipse.jetty.servlet.ServletContextHandler
+import org.json4s.JsonAST.{JNothing, JValue}
+
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.xml.Node
 
 /**
- * The top level component of the UI hierarchy that contains the server.
- *
- * Each WebUI represents a collection of tabs, each of which in turn represents a collection of
- * pages. The use of tabs is optional, however; a WebUI may choose to include pages directly.
- */
+  * The top level component of the UI hierarchy that contains the server.
+  *
+  * Each WebUI represents a collection of tabs, each of which in turn represents a collection of
+  * pages. The use of tabs is optional, however; a WebUI may choose to include pages directly.
+  */
 private[spark] abstract class WebUI(
-    val securityManager: SecurityManager,
-    val sslOptions: SSLOptions,
-    port: Int,
-    conf: SparkConf,
-    basePath: String = "",
-    name: String = "")
+                                     val securityManager: SecurityManager,
+                                     val sslOptions: SSLOptions,
+                                     port: Int,
+                                     conf: SparkConf,
+                                     basePath: String = "",
+                                     name: String = "")
   extends Logging {
 
   protected val tabs = ArrayBuffer[WebUITab]()
   protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected val pageToHandlers = new HashMap[WebUIPage, ArrayBuffer[ServletContextHandler]]
-  protected var serverInfo: Option[ServerInfo] = None
   protected val publicHostName = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
     conf.get(DRIVER_HOST_ADDRESS))
   private val className = Utils.getFormattedClassName(this)
+  protected var serverInfo: Option[ServerInfo] = None
 
   def getBasePath: String = basePath
+
   def getTabs: Seq[WebUITab] = tabs
+
   def getHandlers: Seq[ServletContextHandler] = handlers
+
   def getSecurityManager: SecurityManager = securityManager
 
   /** Attaches a tab to this UI, along with all of its attached pages. */
   def attachTab(tab: WebUITab): Unit = {
     tab.pages.foreach(attachPage)
     tabs += tab
-  }
-
-  /** Detaches a tab from this UI, along with all of its attached pages. */
-  def detachTab(tab: WebUITab): Unit = {
-    tab.pages.foreach(detachPage)
-    tabs -= tab
-  }
-
-  /** Detaches a page from this UI, along with all of its attached handlers. */
-  def detachPage(page: WebUIPage): Unit = {
-    pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
   }
 
   /** Attaches a page to this UI. */
@@ -96,6 +85,17 @@ private[spark] abstract class WebUI(
     serverInfo.foreach(_.addHandler(handler))
   }
 
+  /** Detaches a tab from this UI, along with all of its attached pages. */
+  def detachTab(tab: WebUITab): Unit = {
+    tab.pages.foreach(detachPage)
+    tabs -= tab
+  }
+
+  /** Detaches a page from this UI, along with all of its attached handlers. */
+  def detachPage(page: WebUIPage): Unit = {
+    pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
+  }
+
   /** Detaches a handler from this UI. */
   def detachHandler(handler: ServletContextHandler): Unit = {
     handlers -= handler
@@ -103,20 +103,20 @@ private[spark] abstract class WebUI(
   }
 
   /**
-   * Detaches the content handler at `path` URI.
-   *
-   * @param path Path in UI to unmount.
-   */
+    * Detaches the content handler at `path` URI.
+    *
+    * @param path Path in UI to unmount.
+    */
   def detachHandler(path: String): Unit = {
     handlers.find(_.getContextPath() == path).foreach(detachHandler)
   }
 
   /**
-   * Adds a handler for static content.
-   *
-   * @param resourceBase Root of where to find resources to serve.
-   * @param path Path in UI where to mount the resources.
-   */
+    * Adds a handler for static content.
+    *
+    * @param resourceBase Root of where to find resources to serve.
+    * @param path         Path in UI where to mount the resources.
+    */
   def addStaticHandler(resourceBase: String, path: String = "/static"): Unit = {
     attachHandler(JettyUtils.createStaticHandler(resourceBase, path))
   }
@@ -154,9 +154,9 @@ private[spark] abstract class WebUI(
 
 
 /**
- * A tab that represents a collection of pages.
- * The prefix is appended to the parent address to form a full path, and must not contain slashes.
- */
+  * A tab that represents a collection of pages.
+  * The prefix is appended to the parent address to form a full path, and must not contain slashes.
+  */
 private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
   val pages = ArrayBuffer[WebUIPage]()
   val name = prefix.capitalize
@@ -175,14 +175,15 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
 
 
 /**
- * A page that represents the leaf node in the UI hierarchy.
- *
- * The direct parent of a WebUIPage is not specified as it can be either a WebUI or a WebUITab.
- * If the parent is a WebUI, the prefix is appended to the parent's address to form a full path.
- * Else, if the parent is a WebUITab, the prefix is appended to the super prefix of the parent
- * to form a relative path. The prefix must not contain slashes.
- */
+  * A page that represents the leaf node in the UI hierarchy.
+  *
+  * The direct parent of a WebUIPage is not specified as it can be either a WebUI or a WebUITab.
+  * If the parent is a WebUI, the prefix is appended to the parent's address to form a full path.
+  * Else, if the parent is a WebUITab, the prefix is appended to the super prefix of the parent
+  * to form a relative path. The prefix must not contain slashes.
+  */
 private[spark] abstract class WebUIPage(var prefix: String) {
   def render(request: HttpServletRequest): Seq[Node]
+
   def renderJson(request: HttpServletRequest): JValue = JNothing
 }

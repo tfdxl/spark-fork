@@ -26,20 +26,20 @@ import java.io.InputStream;
  */
 public class ReadAheadInputStreamSuite extends GenericFileInputStreamSuite {
 
-  @Before
-  public void setUp() throws IOException {
-    super.setUp();
-    inputStreams = new InputStream[] {
-      // Tests equal and aligned buffers of wrapped an outer stream.
-      new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 8 * 1024), 8 * 1024),
-      // Tests aligned buffers, wrapped bigger than outer.
-      new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 3 * 1024), 2 * 1024),
-      // Tests aligned buffers, wrapped smaller than outer.
-      new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 2 * 1024), 3 * 1024),
-      // Tests unaligned buffers, wrapped bigger than outer.
-      new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 321), 123),
-      // Tests unaligned buffers, wrapped smaller than outer.
-      new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 123), 321)
-    };
-  }
+    @Before
+    public void setUp() throws IOException {
+        super.setUp();
+        inputStreams = new InputStream[]{
+                // Tests equal and aligned buffers of wrapped an outer stream.
+                new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 8 * 1024), 8 * 1024),
+                // Tests aligned buffers, wrapped bigger than outer.
+                new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 3 * 1024), 2 * 1024),
+                // Tests aligned buffers, wrapped smaller than outer.
+                new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 2 * 1024), 3 * 1024),
+                // Tests unaligned buffers, wrapped bigger than outer.
+                new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 321), 123),
+                // Tests unaligned buffers, wrapped smaller than outer.
+                new ReadAheadInputStream(new NioBufferedFileInputStream(inputFile, 123), 321)
+        };
+    }
 }

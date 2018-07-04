@@ -19,15 +19,14 @@ package org.apache.spark.rdd
 
 import java.io.File
 
-import scala.collection.Map
-import scala.io.Codec
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
-
 import org.apache.spark._
 import org.apache.spark.util.Utils
+
+import scala.collection.Map
+import scala.io.Codec
 
 class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
   val envCommand = if (Utils.isWindows) {
@@ -68,13 +67,14 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     val nums =
       sc.makeRDD(Array(1, 2, 3, 4), 2)
         .mapPartitionsWithIndex((index, iterator) => {
-        new Iterator[Int] {
-          def hasNext = true
-          def next() = {
-            throw new SparkException("Exception to simulate bad scenario")
+          new Iterator[Int] {
+            def hasNext = true
+
+            def next() = {
+              throw new SparkException("Exception to simulate bad scenario")
+            }
           }
-        }
-      })
+        })
 
     val piped = nums.pipe(Seq("cat"))
 
@@ -91,7 +91,8 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     val piped = nums.pipe(Seq("cat"),
       Map[String, String](),
       (f: String => Unit) => {
-        bl.value.foreach(f); f("\u0001")
+        bl.value.foreach(f);
+        f("\u0001")
       },
       (i: Int, f: String => Unit) => f(i + "_"))
 
@@ -112,7 +113,8 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       pipe(Seq("cat"),
         Map[String, String](),
         (f: String => Unit) => {
-          bl.value.foreach(f); f("\u0001")
+          bl.value.foreach(f);
+          f("\u0001")
         },
         (i: Tuple2[String, Iterable[String]], f: String => Unit) => {
           for (e <- i._2) {

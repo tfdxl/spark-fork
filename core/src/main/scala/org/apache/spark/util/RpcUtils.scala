@@ -22,9 +22,11 @@ import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
 
 private[spark] object RpcUtils {
 
+  private val MAX_MESSAGE_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
+
   /**
-   * Retrieve a `RpcEndpointRef` which is located in the driver via its name.
-   */
+    * Retrieve a `RpcEndpointRef` which is located in the driver via its name.
+    */
   def makeDriverRef(name: String, conf: SparkConf, rpcEnv: RpcEnv): RpcEndpointRef = {
     val driverHost: String = conf.get("spark.driver.host", "localhost")
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
@@ -51,8 +53,6 @@ private[spark] object RpcUtils {
   def lookupRpcTimeout(conf: SparkConf): RpcTimeout = {
     RpcTimeout(conf, Seq("spark.rpc.lookupTimeout", "spark.network.timeout"), "120s")
   }
-
-  private val MAX_MESSAGE_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
 
   /** Returns the configured max message size for messages in bytes. */
   def maxMessageSizeBytes(conf: SparkConf): Int = {

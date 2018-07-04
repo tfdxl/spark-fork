@@ -39,6 +39,39 @@ class ImplicitOrderingSuite extends SparkFunSuite with LocalSparkContext {
 }
 
 private object ImplicitOrderingSuite {
+
+  def basicMapExpectations(rdd: RDD[Int]): List[(Boolean, String)] = {
+    List((rdd.map(x => (x, x)).keyOrdering.isDefined,
+      "rdd.map(x => (x, x)).keyOrdering.isDefined"),
+      (rdd.map(x => (1, x)).keyOrdering.isDefined,
+        "rdd.map(x => (1, x)).keyOrdering.isDefined"),
+      (rdd.map(x => (x.toString, x)).keyOrdering.isDefined,
+        "rdd.map(x => (x.toString, x)).keyOrdering.isDefined"),
+      (rdd.map(x => (null, x)).keyOrdering.isDefined,
+        "rdd.map(x => (null, x)).keyOrdering.isDefined"),
+      (rdd.map(x => (new NonOrderedClass, x)).keyOrdering.isEmpty,
+        "rdd.map(x => (new NonOrderedClass, x)).keyOrdering.isEmpty"),
+      (rdd.map(x => (new ComparableClass, x)).keyOrdering.isDefined,
+        "rdd.map(x => (new ComparableClass, x)).keyOrdering.isDefined"),
+      (rdd.map(x => (new OrderedClass, x)).keyOrdering.isDefined,
+        "rdd.map(x => (new OrderedClass, x)).keyOrdering.isDefined"))
+  }
+
+  def otherRDDMethodExpectations(rdd: RDD[Int]): List[(Boolean, String)] = {
+    List((rdd.groupBy(x => x).keyOrdering.isDefined,
+      "rdd.groupBy(x => x).keyOrdering.isDefined"),
+      (rdd.groupBy(x => new NonOrderedClass).keyOrdering.isEmpty,
+        "rdd.groupBy(x => new NonOrderedClass).keyOrdering.isEmpty"),
+      (rdd.groupBy(x => new ComparableClass).keyOrdering.isDefined,
+        "rdd.groupBy(x => new ComparableClass).keyOrdering.isDefined"),
+      (rdd.groupBy(x => new OrderedClass).keyOrdering.isDefined,
+        "rdd.groupBy(x => new OrderedClass).keyOrdering.isDefined"),
+      (rdd.groupBy((x: Int) => x, 5).keyOrdering.isDefined,
+        "rdd.groupBy((x: Int) => x, 5).keyOrdering.isDefined"),
+      (rdd.groupBy((x: Int) => x, new HashPartitioner(5)).keyOrdering.isDefined,
+        "rdd.groupBy((x: Int) => x, new HashPartitioner(5)).keyOrdering.isDefined"))
+  }
+
   class NonOrderedClass {}
 
   class ComparableClass extends Comparable[ComparableClass] {
@@ -47,37 +80,5 @@ private object ImplicitOrderingSuite {
 
   class OrderedClass extends Ordered[OrderedClass] {
     override def compare(o: OrderedClass): Int = throw new UnsupportedOperationException
-  }
-
-  def basicMapExpectations(rdd: RDD[Int]): List[(Boolean, String)] = {
-    List((rdd.map(x => (x, x)).keyOrdering.isDefined,
-            "rdd.map(x => (x, x)).keyOrdering.isDefined"),
-          (rdd.map(x => (1, x)).keyOrdering.isDefined,
-            "rdd.map(x => (1, x)).keyOrdering.isDefined"),
-          (rdd.map(x => (x.toString, x)).keyOrdering.isDefined,
-            "rdd.map(x => (x.toString, x)).keyOrdering.isDefined"),
-          (rdd.map(x => (null, x)).keyOrdering.isDefined,
-            "rdd.map(x => (null, x)).keyOrdering.isDefined"),
-          (rdd.map(x => (new NonOrderedClass, x)).keyOrdering.isEmpty,
-            "rdd.map(x => (new NonOrderedClass, x)).keyOrdering.isEmpty"),
-          (rdd.map(x => (new ComparableClass, x)).keyOrdering.isDefined,
-            "rdd.map(x => (new ComparableClass, x)).keyOrdering.isDefined"),
-          (rdd.map(x => (new OrderedClass, x)).keyOrdering.isDefined,
-            "rdd.map(x => (new OrderedClass, x)).keyOrdering.isDefined"))
-  }
-
-  def otherRDDMethodExpectations(rdd: RDD[Int]): List[(Boolean, String)] = {
-    List((rdd.groupBy(x => x).keyOrdering.isDefined,
-           "rdd.groupBy(x => x).keyOrdering.isDefined"),
-         (rdd.groupBy(x => new NonOrderedClass).keyOrdering.isEmpty,
-           "rdd.groupBy(x => new NonOrderedClass).keyOrdering.isEmpty"),
-         (rdd.groupBy(x => new ComparableClass).keyOrdering.isDefined,
-           "rdd.groupBy(x => new ComparableClass).keyOrdering.isDefined"),
-         (rdd.groupBy(x => new OrderedClass).keyOrdering.isDefined,
-           "rdd.groupBy(x => new OrderedClass).keyOrdering.isDefined"),
-         (rdd.groupBy((x: Int) => x, 5).keyOrdering.isDefined,
-           "rdd.groupBy((x: Int) => x, 5).keyOrdering.isDefined"),
-         (rdd.groupBy((x: Int) => x, new HashPartitioner(5)).keyOrdering.isDefined,
-           "rdd.groupBy((x: Int) => x, new HashPartitioner(5)).keyOrdering.isDefined"))
   }
 }

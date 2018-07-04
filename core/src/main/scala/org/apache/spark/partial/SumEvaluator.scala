@@ -18,20 +18,19 @@
 package org.apache.spark.partial
 
 import org.apache.commons.math3.distribution.{NormalDistribution, TDistribution}
-
 import org.apache.spark.util.StatCounter
 
 /**
- * An ApproximateEvaluator for sums. It estimates the mean and the count and multiplies them
- * together, then uses the formula for the variance of two independent random variables to get
- * a variance for the result and compute a confidence interval.
- */
+  * An ApproximateEvaluator for sums. It estimates the mean and the count and multiplies them
+  * together, then uses the formula for the variance of two independent random variables to get
+  * a variance for the result and compute a confidence interval.
+  */
 private[spark] class SumEvaluator(totalOutputs: Int, confidence: Double)
   extends ApproximateEvaluator[StatCounter, BoundedDouble] {
 
+  private val counter = new StatCounter()
   // modified in merge
   private var outputsMerged = 0
-  private val counter = new StatCounter()
 
   override def merge(outputId: Int, taskResult: StatCounter): Unit = {
     outputsMerged += 1

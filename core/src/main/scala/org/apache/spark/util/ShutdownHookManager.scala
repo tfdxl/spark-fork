@@ -20,37 +20,32 @@ package org.apache.spark.util
 import java.io.File
 import java.util.PriorityQueue
 
-import scala.util.Try
-
 import org.apache.hadoop.fs.FileSystem
-
 import org.apache.spark.internal.Logging
 
+import scala.util.Try
+
 /**
- * Various utility methods used by Spark.
- */
+  * Various utility methods used by Spark.
+  */
 private[spark] object ShutdownHookManager extends Logging {
-  val DEFAULT_SHUTDOWN_PRIORITY = 100
-
-  /**
-   * The shutdown priority of the SparkContext instance. This is lower than the default
-   * priority, so that by default hooks are run before the context is shut down.
-   */
-  val SPARK_CONTEXT_SHUTDOWN_PRIORITY = 50
-
-  /**
-   * The shutdown priority of temp directory must be lower than the SparkContext shutdown
-   * priority. Otherwise cleaning the temp directories while Spark jobs are running can
-   * throw undesirable errors at the time of shutdown.
-   */
-  val TEMP_DIR_SHUTDOWN_PRIORITY = 25
-
   private lazy val shutdownHooks = {
     val manager = new SparkShutdownHookManager()
     manager.install()
     manager
   }
-
+  val DEFAULT_SHUTDOWN_PRIORITY = 100
+  /**
+    * The shutdown priority of the SparkContext instance. This is lower than the default
+    * priority, so that by default hooks are run before the context is shut down.
+    */
+  val SPARK_CONTEXT_SHUTDOWN_PRIORITY = 50
+  /**
+    * The shutdown priority of temp directory must be lower than the SparkContext shutdown
+    * priority. Otherwise cleaning the temp directories while Spark jobs are running can
+    * throw undesirable errors at the time of shutdown.
+    */
+  val TEMP_DIR_SHUTDOWN_PRIORITY = 25
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
 
   // Add a shutdown hook to delete the temp dirs when the JVM exits
@@ -110,13 +105,13 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   /**
-   * Detect whether this thread might be executing a shutdown hook. Will always return true if
-   * the current thread is a running a shutdown hook but may spuriously return true otherwise (e.g.
-   * if System.exit was just called by a concurrent thread).
-   *
-   * Currently, this detects whether the JVM is shutting down by Runtime#addShutdownHook throwing
-   * an IllegalStateException.
-   */
+    * Detect whether this thread might be executing a shutdown hook. Will always return true if
+    * the current thread is a running a shutdown hook but may spuriously return true otherwise (e.g.
+    * if System.exit was just called by a concurrent thread).
+    *
+    * Currently, this detects whether the JVM is shutting down by Runtime#addShutdownHook throwing
+    * an IllegalStateException.
+    */
   def inShutdown(): Boolean = {
     try {
       val hook = new Thread {
@@ -133,46 +128,46 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   /**
-   * Adds a shutdown hook with default priority.
-   *
-   * @param hook The code to run during shutdown.
-   * @return A handle that can be used to unregister the shutdown hook.
-   */
+    * Adds a shutdown hook with default priority.
+    *
+    * @param hook The code to run during shutdown.
+    * @return A handle that can be used to unregister the shutdown hook.
+    */
   def addShutdownHook(hook: () => Unit): AnyRef = {
     addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY)(hook)
   }
 
   /**
-   * Adds a shutdown hook with the given priority. Hooks with higher priority values run
-   * first.
-   *
-   * @param hook The code to run during shutdown.
-   * @return A handle that can be used to unregister the shutdown hook.
-   */
+    * Adds a shutdown hook with the given priority. Hooks with higher priority values run
+    * first.
+    *
+    * @param hook The code to run during shutdown.
+    * @return A handle that can be used to unregister the shutdown hook.
+    */
   def addShutdownHook(priority: Int)(hook: () => Unit): AnyRef = {
     shutdownHooks.add(priority, hook)
   }
 
   /**
-   * Remove a previously installed shutdown hook.
-   *
-   * @param ref A handle returned by `addShutdownHook`.
-   * @return Whether the hook was removed.
-   */
+    * Remove a previously installed shutdown hook.
+    *
+    * @param ref A handle returned by `addShutdownHook`.
+    * @return Whether the hook was removed.
+    */
   def removeShutdownHook(ref: AnyRef): Boolean = {
     shutdownHooks.remove(ref)
   }
 
 }
 
-private [util] class SparkShutdownHookManager {
+private[util] class SparkShutdownHookManager {
 
   private val hooks = new PriorityQueue[SparkShutdownHook]()
   @volatile private var shuttingDown = false
 
   /**
-   * Install a hook to run at shutdown and run all registered hooks in order.
-   */
+    * Install a hook to run at shutdown and run all registered hooks in order.
+    */
   def install(): Unit = {
     val hookTask = new Runnable() {
       override def run(): Unit = runAll()
@@ -184,7 +179,11 @@ private [util] class SparkShutdownHookManager {
   def runAll(): Unit = {
     shuttingDown = true
     var nextHook: SparkShutdownHook = null
-    while ({ nextHook = hooks.synchronized { hooks.poll() }; nextHook != null }) {
+    while ( {
+      nextHook = hooks.synchronized {
+        hooks.poll()
+      }; nextHook != null
+    }) {
       Try(Utils.logUncaughtExceptions(nextHook.run()))
     }
   }
@@ -201,7 +200,9 @@ private [util] class SparkShutdownHookManager {
   }
 
   def remove(ref: AnyRef): Boolean = {
-    hooks.synchronized { hooks.remove(ref) }
+    hooks.synchronized {
+      hooks.remove(ref)
+    }
   }
 
 }

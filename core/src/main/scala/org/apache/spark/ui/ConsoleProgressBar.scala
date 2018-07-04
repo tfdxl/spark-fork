@@ -24,11 +24,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.status.api.v1.StageData
 
 /**
- * ConsoleProgressBar shows the progress of stages in the next line of the console. It poll the
- * status of active stages from the app state store periodically, the progress bar will be showed
- * up after the stage has ran at least 500ms. If multiple stages run in the same time, the status
- * of them will be combined together, showed in one line.
- */
+  * ConsoleProgressBar shows the progress of stages in the next line of the console. It poll the
+  * status of active stages from the app state store periodically, the progress bar will be showed
+  * up after the stage has ran at least 500ms. If multiple stages run in the same time, the status
+  * of them will be combined together, showed in one line.
+  */
 private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   // Carriage return
   private val CR = '\r'
@@ -44,22 +44,45 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
   } else {
     80
   }
-
+  // Schedule a refresh thread to run periodically
+  private val timer = new Timer("refresh progress", true)
   private var lastFinishTime = 0L
   private var lastUpdateTime = 0L
   private var lastProgressBar = ""
-
-  // Schedule a refresh thread to run periodically
-  private val timer = new Timer("refresh progress", true)
-  timer.schedule(new TimerTask{
+  timer.schedule(new TimerTask {
     override def run() {
       refresh()
     }
   }, firstDelayMSec, updatePeriodMSec)
 
   /**
-   * Try to refresh the progress bar in every cycle
-   */
+    * Mark all the stages as finished, clear the progress bar if showed, then the progress will not
+    * interweave with output of jobs.
+    */
+  def finishAll(): Unit = synchronized {
+    clear()
+    lastFinishTime = System.currentTimeMillis()
+  }
+
+  /**
+    * Clear the progress bar if showed.
+    */
+  private def clear() {
+    if (!lastProgressBar.isEmpty) {
+      System.err.printf(CR + " " * TerminalWidth + CR)
+      lastProgressBar = ""
+    }
+  }
+
+  /**
+    * Tear down the timer thread.  The timer thread is a GC root, and it retains the entire
+    * SparkContext if it's not terminated.
+    */
+  def stop(): Unit = timer.cancel()
+
+  /**
+    * Try to refresh the progress bar in every cycle
+    */
   private def refresh(): Unit = synchronized {
     val now = System.currentTimeMillis()
     if (now - lastFinishTime < firstDelayMSec) {
@@ -68,15 +91,15 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     val stages = sc.statusStore.activeStages()
       .filter { s => now - s.submissionTime.get.getTime() > firstDelayMSec }
     if (stages.length > 0) {
-      show(now, stages.take(3))  // display at most 3 stages in same time
+      show(now, stages.take(3)) // display at most 3 stages in same time
     }
   }
 
   /**
-   * Show progress bar in console. The progress bar is displayed in the next line
-   * after your last output, keeps overwriting itself to hold in one line. The logging will follow
-   * the progress bar, then progress bar will be showed in next line without overwrite logs.
-   */
+    * Show progress bar in console. The progress bar is displayed in the next line
+    * after your last output, keeps overwriting itself to hold in one line. The logging will follow
+    * the progress bar, then progress bar will be showed in next line without overwrite logs.
+    */
   private def show(now: Long, stages: Seq[StageData]) {
     val width = TerminalWidth / stages.size
     val bar = stages.map { s =>
@@ -103,29 +126,4 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
     }
     lastProgressBar = bar
   }
-
-  /**
-   * Clear the progress bar if showed.
-   */
-  private def clear() {
-    if (!lastProgressBar.isEmpty) {
-      System.err.printf(CR + " " * TerminalWidth + CR)
-      lastProgressBar = ""
-    }
-  }
-
-  /**
-   * Mark all the stages as finished, clear the progress bar if showed, then the progress will not
-   * interweave with output of jobs.
-   */
-  def finishAll(): Unit = synchronized {
-    clear()
-    lastFinishTime = System.currentTimeMillis()
-  }
-
-  /**
-   * Tear down the timer thread.  The timer thread is a GC root, and it retains the entire
-   * SparkContext if it's not terminated.
-   */
-  def stop(): Unit = timer.cancel()
 }

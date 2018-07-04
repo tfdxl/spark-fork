@@ -20,8 +20,8 @@ package org.apache.spark.partial
 import org.apache.commons.math3.distribution.PoissonDistribution
 
 /**
- * An ApproximateEvaluator for counts.
- */
+  * An ApproximateEvaluator for counts.
+  */
 private[spark] class CountEvaluator(totalOutputs: Int, confidence: Double)
   extends ApproximateEvaluator[Long, BoundedDouble] {
 

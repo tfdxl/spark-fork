@@ -19,84 +19,83 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.atomic.AtomicReference
 
+import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext}
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
-import org.apache.spark.util.{Clock, SystemClock, Utils}
-
 /**
- * BlacklistTracker is designed to track problematic executors and nodes.  It supports blacklisting
- * executors and nodes across an entire application (with a periodic expiry).  TaskSetManagers add
- * additional blacklisting of executors and nodes for individual tasks and stages which works in
- * concert with the blacklisting here.
- *
- * The tracker needs to deal with a variety of workloads, eg.:
- *
- *  * bad user code --  this may lead to many task failures, but that should not count against
- *      individual executors
- *  * many small stages -- this may prevent a bad executor for having many failures within one
- *      stage, but still many failures over the entire application
- *  * "flaky" executors -- they don't fail every task, but are still faulty enough to merit
- *      blacklisting
- *
- * See the design doc on SPARK-8425 for a more in-depth discussion.
- *
- * THREADING: As with most helpers of TaskSchedulerImpl, this is not thread-safe.  Though it is
- * called by multiple threads, callers must already have a lock on the TaskSchedulerImpl.  The
- * one exception is [[nodeBlacklist()]], which can be called without holding a lock.
- */
-private[scheduler] class BlacklistTracker (
-    private val listenerBus: LiveListenerBus,
-    conf: SparkConf,
-    allocationClient: Option[ExecutorAllocationClient],
-    clock: Clock = new SystemClock()) extends Logging {
+  * BlacklistTracker is designed to track problematic executors and nodes.  It supports blacklisting
+  * executors and nodes across an entire application (with a periodic expiry).  TaskSetManagers add
+  * additional blacklisting of executors and nodes for individual tasks and stages which works in
+  * concert with the blacklisting here.
+  *
+  * The tracker needs to deal with a variety of workloads, eg.:
+  *
+  * * bad user code --  this may lead to many task failures, but that should not count against
+  * individual executors
+  * * many small stages -- this may prevent a bad executor for having many failures within one
+  * stage, but still many failures over the entire application
+  * * "flaky" executors -- they don't fail every task, but are still faulty enough to merit
+  * blacklisting
+  *
+  * See the design doc on SPARK-8425 for a more in-depth discussion.
+  *
+  * THREADING: As with most helpers of TaskSchedulerImpl, this is not thread-safe.  Though it is
+  * called by multiple threads, callers must already have a lock on the TaskSchedulerImpl.  The
+  * one exception is [[nodeBlacklist()]], which can be called without holding a lock.
+  */
+private[scheduler] class BlacklistTracker(
+                                           private val listenerBus: LiveListenerBus,
+                                           conf: SparkConf,
+                                           allocationClient: Option[ExecutorAllocationClient],
+                                           clock: Clock = new SystemClock()) extends Logging {
+
+  val BLACKLIST_TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
+
+  BlacklistTracker.validateBlacklistConfs(conf)
+  val executorIdToBlacklistStatus = new HashMap[String, BlacklistedExecutor]()
+  val nodeIdToBlacklistExpiryTime = new HashMap[String, Long]()
+  /**
+    * Mapping from nodes to all of the executors that have been blacklisted on that node. We do *not*
+    * remove from this when executors are removed from spark, so we can track when we get multiple
+    * successive blacklisted executors on one node.  Nonetheless, it will not grow too large because
+    * there cannot be many blacklisted executors on one node, before we stop requesting more
+    * executors on that node, and we clean up the list of blacklisted executors once an executor has
+    * been blacklisted for BLACKLIST_TIMEOUT_MILLIS.
+    */
+  val nodeToBlacklistedExecs = new HashMap[String, HashSet[String]]()
+  private val MAX_FAILURES_PER_EXEC = conf.get(config.MAX_FAILURES_PER_EXEC)
+  private val MAX_FAILED_EXEC_PER_NODE = conf.get(config.MAX_FAILED_EXEC_PER_NODE)
+  private val BLACKLIST_FETCH_FAILURE_ENABLED = conf.get(config.BLACKLIST_FETCH_FAILURE_ENABLED)
+  /**
+    * A map from executorId to information on task failures.  Tracks the time of each task failure,
+    * so that we can avoid blacklisting executors due to failures that are very far apart.  We do not
+    * actively remove from this as soon as tasks hit their timeouts, to avoid the time it would take
+    * to do so.  But it will not grow too large, because as soon as an executor gets too many
+    * failures, we blacklist the executor and remove its entry here.
+    */
+  private val executorIdToFailureList = new HashMap[String, ExecutorFailureList]()
+  /**
+    * An immutable copy of the set of nodes that are currently blacklisted.  Kept in an
+    * AtomicReference to make [[nodeBlacklist()]] thread-safe.
+    */
+  private val _nodeBlacklist = new AtomicReference[Set[String]](Set())
+  /**
+    * Time when the next blacklist will expire.  Used as a
+    * shortcut to avoid iterating over all entries in the blacklist when none will have expired.
+    */
+  var nextExpiryTime: Long = Long.MaxValue
 
   def this(sc: SparkContext, allocationClient: Option[ExecutorAllocationClient]) = {
     this(sc.listenerBus, sc.conf, allocationClient)
   }
 
-  BlacklistTracker.validateBlacklistConfs(conf)
-  private val MAX_FAILURES_PER_EXEC = conf.get(config.MAX_FAILURES_PER_EXEC)
-  private val MAX_FAILED_EXEC_PER_NODE = conf.get(config.MAX_FAILED_EXEC_PER_NODE)
-  val BLACKLIST_TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
-  private val BLACKLIST_FETCH_FAILURE_ENABLED = conf.get(config.BLACKLIST_FETCH_FAILURE_ENABLED)
-
   /**
-   * A map from executorId to information on task failures.  Tracks the time of each task failure,
-   * so that we can avoid blacklisting executors due to failures that are very far apart.  We do not
-   * actively remove from this as soon as tasks hit their timeouts, to avoid the time it would take
-   * to do so.  But it will not grow too large, because as soon as an executor gets too many
-   * failures, we blacklist the executor and remove its entry here.
-   */
-  private val executorIdToFailureList = new HashMap[String, ExecutorFailureList]()
-  val executorIdToBlacklistStatus = new HashMap[String, BlacklistedExecutor]()
-  val nodeIdToBlacklistExpiryTime = new HashMap[String, Long]()
-  /**
-   * An immutable copy of the set of nodes that are currently blacklisted.  Kept in an
-   * AtomicReference to make [[nodeBlacklist()]] thread-safe.
-   */
-  private val _nodeBlacklist = new AtomicReference[Set[String]](Set())
-  /**
-   * Time when the next blacklist will expire.  Used as a
-   * shortcut to avoid iterating over all entries in the blacklist when none will have expired.
-   */
-  var nextExpiryTime: Long = Long.MaxValue
-  /**
-   * Mapping from nodes to all of the executors that have been blacklisted on that node. We do *not*
-   * remove from this when executors are removed from spark, so we can track when we get multiple
-   * successive blacklisted executors on one node.  Nonetheless, it will not grow too large because
-   * there cannot be many blacklisted executors on one node, before we stop requesting more
-   * executors on that node, and we clean up the list of blacklisted executors once an executor has
-   * been blacklisted for BLACKLIST_TIMEOUT_MILLIS.
-   */
-  val nodeToBlacklistedExecs = new HashMap[String, HashSet[String]]()
-
-  /**
-   * Un-blacklists executors and nodes that have been blacklisted for at least
-   * BLACKLIST_TIMEOUT_MILLIS
-   */
+    * Un-blacklists executors and nodes that have been blacklisted for at least
+    * BLACKLIST_TIMEOUT_MILLIS
+    */
   def applyBlacklistTimeout(): Unit = {
     val now = clock.getTimeMillis()
     // quickly check if we've got anything to expire from blacklist -- if not, avoid doing any work
@@ -134,7 +133,9 @@ private[scheduler] class BlacklistTracker (
 
   private def updateNextExpiryTime(): Unit = {
     val execMinExpiry = if (executorIdToBlacklistStatus.nonEmpty) {
-      executorIdToBlacklistStatus.map{_._2.expiryTime}.min
+      executorIdToBlacklistStatus.map {
+        _._2.expiryTime
+      }.min
     } else {
       Long.MaxValue
     }
@@ -144,37 +145,6 @@ private[scheduler] class BlacklistTracker (
       Long.MaxValue
     }
     nextExpiryTime = math.min(execMinExpiry, nodeMinExpiry)
-  }
-
-  private def killBlacklistedExecutor(exec: String): Unit = {
-    if (conf.get(config.BLACKLIST_KILL_ENABLED)) {
-      allocationClient match {
-        case Some(a) =>
-          logInfo(s"Killing blacklisted executor id $exec " +
-            s"since ${config.BLACKLIST_KILL_ENABLED.key} is set.")
-          a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
-            force = true)
-        case None =>
-          logWarning(s"Not attempting to kill blacklisted executor id $exec " +
-            s"since allocation client is not defined.")
-      }
-    }
-  }
-
-  private def killExecutorsOnBlacklistedNode(node: String): Unit = {
-    if (conf.get(config.BLACKLIST_KILL_ENABLED)) {
-      allocationClient match {
-        case Some(a) =>
-          logInfo(s"Killing all executors on blacklisted host $node " +
-            s"since ${config.BLACKLIST_KILL_ENABLED.key} is set.")
-          if (a.killExecutorsOnHost(node) == false) {
-            logError(s"Killing executors on node $node failed.")
-          }
-        case None =>
-          logWarning(s"Not attempting to kill executors on blacklisted host $node " +
-            s"since allocation client is not defined.")
-      }
-    }
   }
 
   def updateBlacklistForFetchFailure(host: String, exec: String): Unit = {
@@ -217,9 +187,9 @@ private[scheduler] class BlacklistTracker (
   }
 
   def updateBlacklistForSuccessfulTaskSet(
-      stageId: Int,
-      stageAttemptId: Int,
-      failuresByExec: HashMap[String, ExecutorFailuresInTaskSet]): Unit = {
+                                           stageId: Int,
+                                           stageAttemptId: Int,
+                                           failuresByExec: HashMap[String, ExecutorFailuresInTaskSet]): Unit = {
     // if any tasks failed, we count them towards the overall failure count for the executor at
     // this point.
     val now = clock.getTimeMillis()
@@ -253,7 +223,7 @@ private[scheduler] class BlacklistTracker (
         // If the node is already in the blacklist, we avoid adding it again with a later expiry
         // time.
         if (blacklistedExecsOnNode.size >= MAX_FAILED_EXEC_PER_NODE &&
-            !nodeIdToBlacklistExpiryTime.contains(node)) {
+          !nodeIdToBlacklistExpiryTime.contains(node)) {
           logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +
             s"executors blacklisted: ${blacklistedExecsOnNode}")
           nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
@@ -265,14 +235,45 @@ private[scheduler] class BlacklistTracker (
     }
   }
 
+  private def killBlacklistedExecutor(exec: String): Unit = {
+    if (conf.get(config.BLACKLIST_KILL_ENABLED)) {
+      allocationClient match {
+        case Some(a) =>
+          logInfo(s"Killing blacklisted executor id $exec " +
+            s"since ${config.BLACKLIST_KILL_ENABLED.key} is set.")
+          a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
+            force = true)
+        case None =>
+          logWarning(s"Not attempting to kill blacklisted executor id $exec " +
+            s"since allocation client is not defined.")
+      }
+    }
+  }
+
+  private def killExecutorsOnBlacklistedNode(node: String): Unit = {
+    if (conf.get(config.BLACKLIST_KILL_ENABLED)) {
+      allocationClient match {
+        case Some(a) =>
+          logInfo(s"Killing all executors on blacklisted host $node " +
+            s"since ${config.BLACKLIST_KILL_ENABLED.key} is set.")
+          if (a.killExecutorsOnHost(node) == false) {
+            logError(s"Killing executors on node $node failed.")
+          }
+        case None =>
+          logWarning(s"Not attempting to kill executors on blacklisted host $node " +
+            s"since allocation client is not defined.")
+      }
+    }
+  }
+
   def isExecutorBlacklisted(executorId: String): Boolean = {
     executorIdToBlacklistStatus.contains(executorId)
   }
 
   /**
-   * Get the full set of nodes that are blacklisted.  Unlike other methods in this class, this *IS*
-   * thread-safe -- no lock required on a taskScheduler.
-   */
+    * Get the full set of nodes that are blacklisted.  Unlike other methods in this class, this *IS*
+    * thread-safe -- no lock required on a taskScheduler.
+    */
   def nodeBlacklist(): Set[String] = {
     _nodeBlacklist.get()
   }
@@ -293,29 +294,27 @@ private[scheduler] class BlacklistTracker (
 
 
   /**
-   * Tracks all failures for one executor (that have not passed the timeout).
-   *
-   * In general we actually expect this to be extremely small, since it won't contain more than the
-   * maximum number of task failures before an executor is failed (default 2).
-   */
+    * Tracks all failures for one executor (that have not passed the timeout).
+    *
+    * In general we actually expect this to be extremely small, since it won't contain more than the
+    * maximum number of task failures before an executor is failed (default 2).
+    */
   private[scheduler] final class ExecutorFailureList extends Logging {
 
-    private case class TaskId(stage: Int, stageAttempt: Int, taskIndex: Int)
-
     /**
-     * All failures on this executor in successful task sets.
-     */
+      * All failures on this executor in successful task sets.
+      */
     private var failuresAndExpiryTimes = ArrayBuffer[(TaskId, Long)]()
     /**
-     * As an optimization, we track the min expiry time over all entries in failuresAndExpiryTimes
-     * so its quick to tell if there are any failures with expiry before the current time.
-     */
+      * As an optimization, we track the min expiry time over all entries in failuresAndExpiryTimes
+      * so its quick to tell if there are any failures with expiry before the current time.
+      */
     private var minExpiryTime = Long.MaxValue
 
     def addFailures(
-        stage: Int,
-        stageAttempt: Int,
-        failuresInTaskSet: ExecutorFailuresInTaskSet): Unit = {
+                     stage: Int,
+                     stageAttempt: Int,
+                     failuresInTaskSet: ExecutorFailuresInTaskSet): Unit = {
       failuresInTaskSet.taskToFailureCountAndFailureTime.foreach {
         case (taskIdx, (_, failureTime)) =>
           val expiryTime = failureTime + BLACKLIST_TIMEOUT_MILLIS
@@ -327,26 +326,26 @@ private[scheduler] class BlacklistTracker (
     }
 
     /**
-     * The number of unique tasks that failed on this executor.  Only counts failures within the
-     * timeout, and in successful tasksets.
-     */
+      * The number of unique tasks that failed on this executor.  Only counts failures within the
+      * timeout, and in successful tasksets.
+      */
     def numUniqueTaskFailures: Int = failuresAndExpiryTimes.size
 
     def isEmpty: Boolean = failuresAndExpiryTimes.isEmpty
 
     /**
-     * Apply the timeout to individual tasks.  This is to prevent one-off failures that are very
-     * spread out in time (and likely have nothing to do with problems on the executor) from
-     * triggering blacklisting.  However, note that we do *not* remove executors and nodes from
-     * the blacklist as we expire individual task failures -- each have their own timeout.  Eg.,
-     * suppose:
-     *  * timeout = 10, maxFailuresPerExec = 2
-     *  * Task 1 fails on exec 1 at time 0
-     *  * Task 2 fails on exec 1 at time 5
-     * -->  exec 1 is blacklisted from time 5 - 15.
-     * This is to simplify the implementation, as well as keep the behavior easier to understand
-     * for the end user.
-     */
+      * Apply the timeout to individual tasks.  This is to prevent one-off failures that are very
+      * spread out in time (and likely have nothing to do with problems on the executor) from
+      * triggering blacklisting.  However, note that we do *not* remove executors and nodes from
+      * the blacklist as we expire individual task failures -- each have their own timeout.  Eg.,
+      * suppose:
+      * * timeout = 10, maxFailuresPerExec = 2
+      * * Task 1 fails on exec 1 at time 0
+      * * Task 2 fails on exec 1 at time 5
+      * -->  exec 1 is blacklisted from time 5 - 15.
+      * This is to simplify the implementation, as well as keep the behavior easier to understand
+      * for the end user.
+      */
     def dropFailuresWithTimeoutBefore(dropBefore: Long): Unit = {
       if (minExpiryTime < dropBefore) {
         var newMinExpiry = Long.MaxValue
@@ -367,6 +366,8 @@ private[scheduler] class BlacklistTracker (
     override def toString(): String = {
       s"failures = $failuresAndExpiryTimes"
     }
+
+    private case class TaskId(stage: Int, stageAttempt: Int, taskIndex: Int)
   }
 
 }
@@ -376,12 +377,12 @@ private[spark] object BlacklistTracker extends Logging {
   private val DEFAULT_TIMEOUT = "1h"
 
   /**
-   * Returns true if the blacklist is enabled, based on checking the configuration in the following
-   * order:
-   * 1. Is it specifically enabled or disabled?
-   * 2. Is it enabled via the legacy timeout conf?
-   * 3. Default is off
-   */
+    * Returns true if the blacklist is enabled, based on checking the configuration in the following
+    * order:
+    * 1. Is it specifically enabled or disabled?
+    * 2. Is it enabled via the legacy timeout conf?
+    * 3. Default is off
+    */
   def isBlacklistEnabled(conf: SparkConf): Boolean = {
     conf.get(config.BLACKLIST_ENABLED) match {
       case Some(enabled) =>
@@ -402,23 +403,15 @@ private[spark] object BlacklistTracker extends Logging {
     }
   }
 
-  def getBlacklistTimeout(conf: SparkConf): Long = {
-    conf.get(config.BLACKLIST_TIMEOUT_CONF).getOrElse {
-      conf.get(config.BLACKLIST_LEGACY_TIMEOUT_CONF).getOrElse {
-        Utils.timeStringAsMs(DEFAULT_TIMEOUT)
-      }
-    }
-  }
-
   /**
-   * Verify that blacklist configurations are consistent; if not, throw an exception.  Should only
-   * be called if blacklisting is enabled.
-   *
-   * The configuration for the blacklist is expected to adhere to a few invariants.  Default
-   * values follow these rules of course, but users may unwittingly change one configuration
-   * without making the corresponding adjustment elsewhere.  This ensures we fail-fast when
-   * there are such misconfigurations.
-   */
+    * Verify that blacklist configurations are consistent; if not, throw an exception.  Should only
+    * be called if blacklisting is enabled.
+    *
+    * The configuration for the blacklist is expected to adhere to a few invariants.  Default
+    * values follow these rules of course, but users may unwittingly change one configuration
+    * without making the corresponding adjustment elsewhere.  This ensures we fail-fast when
+    * there are such misconfigurations.
+    */
   def validateBlacklistConfs(conf: SparkConf): Unit = {
 
     def mustBePos(k: String, v: String): Unit = {
@@ -460,6 +453,14 @@ private[spark] object BlacklistTracker extends Logging {
         s"Spark will not be robust to one bad node.  Decrease " +
         s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.MAX_TASK_FAILURES.key}, " +
         s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
+    }
+  }
+
+  def getBlacklistTimeout(conf: SparkConf): Long = {
+    conf.get(config.BLACKLIST_TIMEOUT_CONF).getOrElse {
+      conf.get(config.BLACKLIST_LEGACY_TIMEOUT_CONF).getOrElse {
+        Utils.timeStringAsMs(DEFAULT_TIMEOUT)
+      }
     }
   }
 }

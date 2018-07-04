@@ -21,19 +21,35 @@ import java.io._
 import java.lang.reflect.{Field, Method}
 import java.security.AccessController
 
+import org.apache.spark.internal.Logging
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
-
 private[spark] object SerializationDebugger extends Logging {
 
   /**
-   * Improve the given NotSerializableException with the serialization path leading from the given
-   * object to the problematic object. This is turned off automatically if
-   * `sun.io.serialization.extendedDebugInfo` flag is turned on for the JVM.
-   */
+    * Object to hold all the reflection objects. If we run on a JVM that we cannot understand,
+    * this field will be null and this the debug helper should be disabled.
+    */
+  private val reflect: ObjectStreamClassReflection = try {
+    new ObjectStreamClassReflection
+  } catch {
+    case e: Exception =>
+      logWarning("Cannot find private methods using reflection", e)
+      null
+  }
+  private[serializer] var enableDebugging: Boolean = {
+    !AccessController.doPrivileged(new sun.security.action.GetBooleanAction(
+      "sun.io.serialization.extendedDebugInfo")).booleanValue()
+  }
+
+  /**
+    * Improve the given NotSerializableException with the serialization path leading from the given
+    * object to the problematic object. This is turned off automatically if
+    * `sun.io.serialization.extendedDebugInfo` flag is turned on for the JVM.
+    */
   def improveException(obj: Any, e: NotSerializableException): NotSerializableException = {
     if (enableDebugging && reflect != null) {
       try {
@@ -51,25 +67,42 @@ private[spark] object SerializationDebugger extends Logging {
   }
 
   /**
-   * Find the path leading to a not serializable object. This method is modeled after OpenJDK's
-   * serialization mechanism, and handles the following cases:
-   *
-   *  - primitives
-   *  - arrays of primitives
-   *  - arrays of non-primitive objects
-   *  - Serializable objects
-   *  - Externalizable objects
-   *  - writeReplace
-   *
-   * It does not yet handle writeObject override, but that shouldn't be too hard to do either.
-   */
+    * Find the path leading to a not serializable object. This method is modeled after OpenJDK's
+    * serialization mechanism, and handles the following cases:
+    *
+    *  - primitives
+    *  - arrays of primitives
+    *  - arrays of non-primitive objects
+    *  - Serializable objects
+    *  - Externalizable objects
+    *  - writeReplace
+    *
+    * It does not yet handle writeObject override, but that shouldn't be too hard to do either.
+    */
   private[serializer] def find(obj: Any): List[String] = {
     new SerializationDebugger().visit(obj, List.empty)
   }
 
-  private[serializer] var enableDebugging: Boolean = {
-    !AccessController.doPrivileged(new sun.security.action.GetBooleanAction(
-      "sun.io.serialization.extendedDebugInfo")).booleanValue()
+  /**
+    * Find the object to serialize and the associated [[ObjectStreamClass]]. This method handles
+    * writeReplace in Serializable. It starts with the object itself, and keeps calling the
+    * writeReplace method until there is no more.
+    */
+  @tailrec
+  private def findObjectAndDescriptor(o: Object): (Object, ObjectStreamClass) = {
+    val cl = o.getClass
+    val desc = ObjectStreamClass.lookupAny(cl)
+    if (!desc.hasWriteReplaceMethod) {
+      (o, desc)
+    } else {
+      val replaced = desc.invokeWriteReplace(o)
+      // `writeReplace` recursion stops when the returned object has the same class.
+      if (replaced.getClass == o.getClass) {
+        (replaced, desc)
+      } else {
+        findObjectAndDescriptor(replaced)
+      }
+    }
   }
 
   private class SerializationDebugger {
@@ -78,9 +111,9 @@ private[spark] object SerializationDebugger extends Logging {
     private val visited = new mutable.HashSet[Any]
 
     /**
-     * Visit the object and its fields and stop when we find an object that is not serializable.
-     * Return the path as a list. If everything can be serialized, return an empty list.
-     */
+      * Visit the object and its fields and stop when we find an object that is not serializable.
+      * Return the path as a list. If everything can be serialized, return an empty list.
+      */
     def visit(o: Any, stack: List[String]): List[String] = {
       if (o == null) {
         List.empty
@@ -127,13 +160,12 @@ private[spark] object SerializationDebugger extends Logging {
     }
 
     /**
-     * Visit an externalizable object.
-     * Since writeExternal() can choose to add arbitrary objects at the time of serialization,
-     * the only way to capture all the objects it will serialize is by using a
-     * dummy ObjectOutput that collects all the relevant objects for further testing.
-     */
-    private def visitExternalizable(o: java.io.Externalizable, stack: List[String]): List[String] =
-    {
+      * Visit an externalizable object.
+      * Since writeExternal() can choose to add arbitrary objects at the time of serialization,
+      * the only way to capture all the objects it will serialize is by using a
+      * dummy ObjectOutput that collects all the relevant objects for further testing.
+      */
+    private def visitExternalizable(o: java.io.Externalizable, stack: List[String]): List[String] = {
       val fieldList = new ListObjectOutput
       o.writeExternal(fieldList)
       val childObjects = fieldList.outputArray
@@ -216,14 +248,14 @@ private[spark] object SerializationDebugger extends Logging {
     }
 
     /**
-     * Visit a serializable object which has the writeObject() defined.
-     * Since writeObject() can choose to add arbitrary objects at the time of serialization,
-     * the only way to capture all the objects it will serialize is by using a
-     * dummy ObjectOutputStream that collects all the relevant fields for further testing.
-     * This is similar to how externalizable objects are visited.
-     */
+      * Visit a serializable object which has the writeObject() defined.
+      * Since writeObject() can choose to add arbitrary objects at the time of serialization,
+      * the only way to capture all the objects it will serialize is by using a
+      * dummy ObjectOutputStream that collects all the relevant fields for further testing.
+      * This is similar to how externalizable objects are visited.
+      */
     private def visitSerializableWithWriteObjectMethod(
-        o: Object, stack: List[String]): List[String] = {
+                                                        o: Object, stack: List[String]): List[String] = {
       val innerObjectsCatcher = new ListObjectOutputStream
       var notSerializableFound = false
       try {
@@ -254,76 +286,52 @@ private[spark] object SerializationDebugger extends Logging {
   }
 
   /**
-   * Find the object to serialize and the associated [[ObjectStreamClass]]. This method handles
-   * writeReplace in Serializable. It starts with the object itself, and keeps calling the
-   * writeReplace method until there is no more.
-   */
-  @tailrec
-  private def findObjectAndDescriptor(o: Object): (Object, ObjectStreamClass) = {
-    val cl = o.getClass
-    val desc = ObjectStreamClass.lookupAny(cl)
-    if (!desc.hasWriteReplaceMethod) {
-      (o, desc)
-    } else {
-      val replaced = desc.invokeWriteReplace(o)
-      // `writeReplace` recursion stops when the returned object has the same class.
-      if (replaced.getClass == o.getClass) {
-        (replaced, desc)
-      } else {
-        findObjectAndDescriptor(replaced)
-      }
-    }
-  }
-
-  /**
-   * A dummy [[ObjectOutput]] that simply saves the list of objects written by a writeExternal
-   * call, and returns them through `outputArray`.
-   */
+    * A dummy [[ObjectOutput]] that simply saves the list of objects written by a writeExternal
+    * call, and returns them through `outputArray`.
+    */
   private class ListObjectOutput extends ObjectOutput {
     private val output = new mutable.ArrayBuffer[Any]
+
     def outputArray: Array[Any] = output.toArray
+
     override def writeObject(o: Any): Unit = output += o
+
     override def flush(): Unit = {}
+
     override def write(i: Int): Unit = {}
+
     override def write(bytes: Array[Byte]): Unit = {}
+
     override def write(bytes: Array[Byte], i: Int, i1: Int): Unit = {}
+
     override def close(): Unit = {}
+
     override def writeFloat(v: Float): Unit = {}
+
     override def writeChars(s: String): Unit = {}
+
     override def writeDouble(v: Double): Unit = {}
+
     override def writeUTF(s: String): Unit = {}
+
     override def writeShort(i: Int): Unit = {}
+
     override def writeInt(i: Int): Unit = {}
+
     override def writeBoolean(b: Boolean): Unit = {}
+
     override def writeBytes(s: String): Unit = {}
+
     override def writeChar(i: Int): Unit = {}
+
     override def writeLong(l: Long): Unit = {}
+
     override def writeByte(i: Int): Unit = {}
   }
 
   /** An output stream that emulates /dev/null */
   private class NullOutputStream extends OutputStream {
-    override def write(b: Int) { }
-  }
-
-  /**
-   * A dummy [[ObjectOutputStream]] that saves the list of objects written to it and returns
-   * them through `outputArray`. This works by using the [[ObjectOutputStream]]'s `replaceObject()`
-   * method which gets called on every object, only if replacing is enabled. So this subclass
-   * of [[ObjectOutputStream]] enabled replacing, and uses replaceObject to get the objects that
-   * are being serializabled. The serialized bytes are ignored by sending them to a
-   * [[NullOutputStream]], which acts like a /dev/null.
-   */
-  private class ListObjectOutputStream extends ObjectOutputStream(new NullOutputStream) {
-    private val output = new mutable.ArrayBuffer[Any]
-    this.enableReplaceObject(true)
-
-    def outputArray: Array[Any] = output.toArray
-
-    override def replaceObject(obj: Object): Object = {
-      output += obj
-      obj
-    }
+    override def write(b: Int) {}
   }
 
   /** An implicit class that allows us to call private methods of ObjectStreamClass. */
@@ -356,15 +364,23 @@ private[spark] object SerializationDebugger extends Logging {
   }
 
   /**
-   * Object to hold all the reflection objects. If we run on a JVM that we cannot understand,
-   * this field will be null and this the debug helper should be disabled.
-   */
-  private val reflect: ObjectStreamClassReflection = try {
-    new ObjectStreamClassReflection
-  } catch {
-    case e: Exception =>
-      logWarning("Cannot find private methods using reflection", e)
-      null
+    * A dummy [[ObjectOutputStream]] that saves the list of objects written to it and returns
+    * them through `outputArray`. This works by using the [[ObjectOutputStream]]'s `replaceObject()`
+    * method which gets called on every object, only if replacing is enabled. So this subclass
+    * of [[ObjectOutputStream]] enabled replacing, and uses replaceObject to get the objects that
+    * are being serializabled. The serialized bytes are ignored by sending them to a
+    * [[NullOutputStream]], which acts like a /dev/null.
+    */
+  private class ListObjectOutputStream extends ObjectOutputStream(new NullOutputStream) {
+    private val output = new mutable.ArrayBuffer[Any]
+    this.enableReplaceObject(true)
+
+    def outputArray: Array[Any] = output.toArray
+
+    override def replaceObject(obj: Object): Object = {
+      output += obj
+      obj
+    }
   }
 
   private class ObjectStreamClassReflection {
@@ -420,4 +436,5 @@ private[spark] object SerializationDebugger extends Logging {
       f
     }
   }
+
 }

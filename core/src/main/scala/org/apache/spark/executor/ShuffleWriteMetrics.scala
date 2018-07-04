@@ -22,48 +22,54 @@ import org.apache.spark.util.LongAccumulator
 
 
 /**
- * :: DeveloperApi ::
- * A collection of accumulators that represent metrics about writing shuffle data.
- * Operations are not thread-safe.
- */
+  * :: DeveloperApi ::
+  * A collection of accumulators that represent metrics about writing shuffle data.
+  * Operations are not thread-safe.
+  */
 @DeveloperApi
-class ShuffleWriteMetrics private[spark] () extends Serializable {
+class ShuffleWriteMetrics private[spark]() extends Serializable {
   private[executor] val _bytesWritten = new LongAccumulator
   private[executor] val _recordsWritten = new LongAccumulator
   private[executor] val _writeTime = new LongAccumulator
-
-  /**
-   * Number of bytes written for the shuffle by this task.
-   */
-  def bytesWritten: Long = _bytesWritten.sum
-
-  /**
-   * Total number of records written to the shuffle by this task.
-   */
-  def recordsWritten: Long = _recordsWritten.sum
-
-  /**
-   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
-   */
-  def writeTime: Long = _writeTime.sum
-
-  private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
-  private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
-  private[spark] def incWriteTime(v: Long): Unit = _writeTime.add(v)
-  private[spark] def decBytesWritten(v: Long): Unit = {
-    _bytesWritten.setValue(bytesWritten - v)
-  }
-  private[spark] def decRecordsWritten(v: Long): Unit = {
-    _recordsWritten.setValue(recordsWritten - v)
-  }
 
   // Legacy methods for backward compatibility.
   // TODO: remove these once we make this class private.
   @deprecated("use bytesWritten instead", "2.0.0")
   def shuffleBytesWritten: Long = bytesWritten
+
+  /**
+    * Number of bytes written for the shuffle by this task.
+    */
+  def bytesWritten: Long = _bytesWritten.sum
+
   @deprecated("use writeTime instead", "2.0.0")
   def shuffleWriteTime: Long = writeTime
+
+  /**
+    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
+    */
+  def writeTime: Long = _writeTime.sum
+
   @deprecated("use recordsWritten instead", "2.0.0")
   def shuffleRecordsWritten: Long = recordsWritten
+
+  private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
+
+  private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
+
+  private[spark] def incWriteTime(v: Long): Unit = _writeTime.add(v)
+
+  private[spark] def decBytesWritten(v: Long): Unit = {
+    _bytesWritten.setValue(bytesWritten - v)
+  }
+
+  private[spark] def decRecordsWritten(v: Long): Unit = {
+    _recordsWritten.setValue(recordsWritten - v)
+  }
+
+  /**
+    * Total number of records written to the shuffle by this task.
+    */
+  def recordsWritten: Long = _recordsWritten.sum
 
 }

@@ -19,34 +19,28 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
+
 /**
- * A Schedulable entity that represents collection of Pools or TaskSetManagers
- */
+  * A Schedulable entity that represents collection of Pools or TaskSetManagers
+  */
 private[spark] class Pool(
-    val poolName: String,
-    val schedulingMode: SchedulingMode,
-    initMinShare: Int,
-    initWeight: Int)
+                           val poolName: String,
+                           val schedulingMode: SchedulingMode,
+                           initMinShare: Int,
+                           initWeight: Int)
   extends Schedulable with Logging {
 
   val schedulableQueue = new ConcurrentLinkedQueue[Schedulable]
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
   val weight = initWeight
   val minShare = initMinShare
-  var runningTasks = 0
   val priority = 0
-
-  // A pool's stage id is used to break the tie in scheduling.
-  var stageId = -1
   val name = poolName
-  var parent: Pool = null
-
   private val taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
     schedulingMode match {
       case SchedulingMode.FAIR =>
@@ -58,6 +52,10 @@ private[spark] class Pool(
         throw new IllegalArgumentException(msg)
     }
   }
+  var runningTasks = 0
+  // A pool's stage id is used to break the tie in scheduling.
+  var stageId = -1
+  var parent: Pool = null
 
   override def addSchedulable(schedulable: Schedulable) {
     require(schedulable != null)

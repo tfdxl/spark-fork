@@ -23,20 +23,19 @@ import java.util.Locale
 import com.github.luben.zstd.{ZstdInputStream, ZstdOutputStream}
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
-import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
-
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
+import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 /**
- * :: DeveloperApi ::
- * CompressionCodec allows the customization of choosing different compression implementations
- * to be used in block storage.
- *
- * @note The wire protocol for a codec is not guaranteed compatible across versions of Spark.
- * This is intended for use as an internal compression utility within a single Spark application.
- */
+  * :: DeveloperApi ::
+  * CompressionCodec allows the customization of choosing different compression implementations
+  * to be used in block storage.
+  *
+  * @note The wire protocol for a codec is not guaranteed compatible across versions of Spark.
+  *       This is intended for use as an internal compression utility within a single Spark application.
+  */
 @DeveloperApi
 trait CompressionCodec {
 
@@ -47,25 +46,22 @@ trait CompressionCodec {
 
 private[spark] object CompressionCodec {
 
+  val FALLBACK_COMPRESSION_CODEC = "snappy"
+  val DEFAULT_COMPRESSION_CODEC = "lz4"
+  val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
   private val configKey = "spark.io.compression.codec"
-
-  private[spark] def supportsConcatenationOfSerializedStreams(codec: CompressionCodec): Boolean = {
-    (codec.isInstanceOf[SnappyCompressionCodec] || codec.isInstanceOf[LZFCompressionCodec]
-      || codec.isInstanceOf[LZ4CompressionCodec] || codec.isInstanceOf[ZStdCompressionCodec])
-  }
-
   private val shortCompressionCodecNames = Map(
     "lz4" -> classOf[LZ4CompressionCodec].getName,
     "lzf" -> classOf[LZFCompressionCodec].getName,
     "snappy" -> classOf[SnappyCompressionCodec].getName,
     "zstd" -> classOf[ZStdCompressionCodec].getName)
 
-  def getCodecName(conf: SparkConf): String = {
-    conf.get(configKey, DEFAULT_COMPRESSION_CODEC)
-  }
-
   def createCodec(conf: SparkConf): CompressionCodec = {
     createCodec(conf, getCodecName(conf))
+  }
+
+  def getCodecName(conf: SparkConf): String = {
+    conf.get(configKey, DEFAULT_COMPRESSION_CODEC)
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
@@ -82,33 +78,36 @@ private[spark] object CompressionCodec {
   }
 
   /**
-   * Return the short version of the given codec name.
-   * If it is already a short name, just return it.
-   */
+    * Return the short version of the given codec name.
+    * If it is already a short name, just return it.
+    */
   def getShortName(codecName: String): String = {
     if (shortCompressionCodecNames.contains(codecName)) {
       codecName
     } else {
       shortCompressionCodecNames
         .collectFirst { case (k, v) if v == codecName => k }
-        .getOrElse { throw new IllegalArgumentException(s"No short name for codec $codecName.") }
+        .getOrElse {
+          throw new IllegalArgumentException(s"No short name for codec $codecName.")
+        }
     }
   }
 
-  val FALLBACK_COMPRESSION_CODEC = "snappy"
-  val DEFAULT_COMPRESSION_CODEC = "lz4"
-  val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
+  private[spark] def supportsConcatenationOfSerializedStreams(codec: CompressionCodec): Boolean = {
+    (codec.isInstanceOf[SnappyCompressionCodec] || codec.isInstanceOf[LZFCompressionCodec]
+      || codec.isInstanceOf[LZ4CompressionCodec] || codec.isInstanceOf[ZStdCompressionCodec])
+  }
 }
 
 /**
- * :: DeveloperApi ::
- * LZ4 implementation of [[org.apache.spark.io.CompressionCodec]].
- * Block size can be configured by `spark.io.compression.lz4.blockSize`.
- *
- * @note The wire protocol for this codec is not guaranteed to be compatible across versions
- * of Spark. This is intended for use as an internal compression utility within a single Spark
- * application.
- */
+  * :: DeveloperApi ::
+  * LZ4 implementation of [[org.apache.spark.io.CompressionCodec]].
+  * Block size can be configured by `spark.io.compression.lz4.blockSize`.
+  *
+  * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+  *       of Spark. This is intended for use as an internal compression utility within a single Spark
+  *       application.
+  */
 @DeveloperApi
 class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
 
@@ -125,13 +124,13 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
 
 
 /**
- * :: DeveloperApi ::
- * LZF implementation of [[org.apache.spark.io.CompressionCodec]].
- *
- * @note The wire protocol for this codec is not guaranteed to be compatible across versions
- * of Spark. This is intended for use as an internal compression utility within a single Spark
- * application.
- */
+  * :: DeveloperApi ::
+  * LZF implementation of [[org.apache.spark.io.CompressionCodec]].
+  *
+  * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+  *       of Spark. This is intended for use as an internal compression utility within a single Spark
+  *       application.
+  */
 @DeveloperApi
 class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
@@ -144,14 +143,14 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
 
 /**
- * :: DeveloperApi ::
- * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
- * Block size can be configured by `spark.io.compression.snappy.blockSize`.
- *
- * @note The wire protocol for this codec is not guaranteed to be compatible across versions
- * of Spark. This is intended for use as an internal compression utility within a single Spark
- * application.
- */
+  * :: DeveloperApi ::
+  * Snappy implementation of [[org.apache.spark.io.CompressionCodec]].
+  * Block size can be configured by `spark.io.compression.snappy.blockSize`.
+  *
+  * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+  *       of Spark. This is intended for use as an internal compression utility within a single Spark
+  *       application.
+  */
 @DeveloperApi
 class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   val version = SnappyCompressionCodec.version
@@ -165,10 +164,10 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
 }
 
 /**
- * Object guards against memory leak bug in snappy-java library:
- * (https://github.com/xerial/snappy-java/issues/131).
- * Before a new version of the library, we only call the method once and cache the result.
- */
+  * Object guards against memory leak bug in snappy-java library:
+  * (https://github.com/xerial/snappy-java/issues/131).
+  * Before a new version of the library, we only call the method once and cache the result.
+  */
 private final object SnappyCompressionCodec {
   private lazy val version: String = try {
     Snappy.getNativeLibraryVersion
@@ -178,10 +177,10 @@ private final object SnappyCompressionCodec {
 }
 
 /**
- * Wrapper over `SnappyOutputStream` which guards against write-after-close and double-close
- * issues. See SPARK-7660 for more details. This wrapping can be removed if we upgrade to a version
- * of snappy-java that contains the fix for https://github.com/xerial/snappy-java/issues/107.
- */
+  * Wrapper over `SnappyOutputStream` which guards against write-after-close and double-close
+  * issues. See SPARK-7660 for more details. This wrapping can be removed if we upgrade to a version
+  * of snappy-java that contains the fix for https://github.com/xerial/snappy-java/issues/107.
+  */
 private final class SnappyOutputStreamWrapper(os: SnappyOutputStream) extends OutputStream {
 
   private[this] var closed: Boolean = false
@@ -223,14 +222,14 @@ private final class SnappyOutputStreamWrapper(os: SnappyOutputStream) extends Ou
 }
 
 /**
- * :: DeveloperApi ::
- * ZStandard implementation of [[org.apache.spark.io.CompressionCodec]]. For more
- * details see - http://facebook.github.io/zstd/
- *
- * @note The wire protocol for this codec is not guaranteed to be compatible across versions
- * of Spark. This is intended for use as an internal compression utility within a single Spark
- * application.
- */
+  * :: DeveloperApi ::
+  * ZStandard implementation of [[org.apache.spark.io.CompressionCodec]]. For more
+  * details see - http://facebook.github.io/zstd/
+  *
+  * @note The wire protocol for this codec is not guaranteed to be compatible across versions
+  *       of Spark. This is intended for use as an internal compression utility within a single Spark
+  *       application.
+  */
 @DeveloperApi
 class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
 

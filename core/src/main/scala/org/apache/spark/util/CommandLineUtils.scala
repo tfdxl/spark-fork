@@ -19,12 +19,10 @@ package org.apache.spark.util
 
 import java.io.PrintStream
 
-import org.apache.spark.SparkException
-
 /**
- * Contains basic command line parsing functionality and methods to parse some common Spark CLI
- * options.
- */
+  * Contains basic command line parsing functionality and methods to parse some common Spark CLI
+  * options.
+  */
 private[spark] trait CommandLineUtils {
 
   // Exposed for testing
@@ -32,8 +30,8 @@ private[spark] trait CommandLineUtils {
 
   private[spark] var printStream: PrintStream = System.err
 
-  // scalastyle:off println
-  private[spark] def printMessage(str: String): Unit = printStream.println(str)
+  def main(args: Array[String]): Unit
+
   // scalastyle:on println
 
   private[spark] def printErrorAndExit(str: String): Unit = {
@@ -42,5 +40,6 @@ private[spark] trait CommandLineUtils {
     exitFn(1)
   }
 
-  def main(args: Array[String]): Unit
+  // scalastyle:off println
+  private[spark] def printMessage(str: String): Unit = printStream.println(str)
 }

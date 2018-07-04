@@ -72,5 +72,6 @@ class PartitionPruningRDDSuite extends SparkFunSuite with SharedSparkContext {
 
 class TestPartition(i: Int, value: Int) extends Partition with Serializable {
   def index: Int = i
+
   def testValue: Int = this.value
 }

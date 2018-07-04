@@ -17,10 +17,10 @@
 
 package org.apache.spark.rdd
 
-import scala.reflect.ClassTag
-
-import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Partition, TaskContext}
+
+import scala.reflect.ClassTag
 
 private[spark]
 class ZippedWithIndexRDDPartition(val prev: Partition, val startIndex: Long)
@@ -29,13 +29,13 @@ class ZippedWithIndexRDDPartition(val prev: Partition, val startIndex: Long)
 }
 
 /**
- * Represents an RDD zipped with its element indices. The ordering is first based on the partition
- * index and then the ordering of items within each partition. So the first item in the first
- * partition gets index 0, and the last item in the last partition receives the largest index.
- *
- * @param prev parent RDD
- * @tparam T parent RDD item type
- */
+  * Represents an RDD zipped with its element indices. The ordering is first based on the partition
+  * index and then the ordering of items within each partition. So the first item in the first
+  * partition gets index 0, and the last item in the last partition receives the largest index.
+  *
+  * @param prev parent RDD
+  * @tparam T parent RDD item type
+  */
 private[spark]
 class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev) {
 

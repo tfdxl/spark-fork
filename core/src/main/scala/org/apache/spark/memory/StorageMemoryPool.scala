@@ -18,22 +18,21 @@
 package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.memory.MemoryStore
 
 /**
- * Performs bookkeeping for managing an adjustable-size pool of memory that is used for storage
- * (caching).
- *
- * @param lock a [[MemoryManager]] instance to synchronize on
- * @param memoryMode the type of memory tracked by this pool (on- or off-heap)
- */
+  * Performs bookkeeping for managing an adjustable-size pool of memory that is used for storage
+  * (caching).
+  *
+  * @param lock       a [[MemoryManager]] instance to synchronize on
+  * @param memoryMode the type of memory tracked by this pool (on- or off-heap)
+  */
 private[memory] class StorageMemoryPool(
-    lock: Object,
-    memoryMode: MemoryMode
-  ) extends MemoryPool(lock) with Logging {
+                                         lock: Object,
+                                         memoryMode: MemoryMode
+                                       ) extends MemoryPool(lock) with Logging {
 
   private[this] val poolName: String = memoryMode match {
     case MemoryMode.ON_HEAP => "on-heap storage"
@@ -42,49 +41,38 @@ private[memory] class StorageMemoryPool(
 
   @GuardedBy("lock")
   private[this] var _memoryUsed: Long = 0L
-
-  override def memoryUsed: Long = lock.synchronized {
-    _memoryUsed
-  }
-
   private var _memoryStore: MemoryStore = _
-  def memoryStore: MemoryStore = {
-    if (_memoryStore == null) {
-      throw new IllegalStateException("memory store not initialized yet")
-    }
-    _memoryStore
-  }
 
   /**
-   * Set the [[MemoryStore]] used by this manager to evict cached blocks.
-   * This must be set after construction due to initialization ordering constraints.
-   */
+    * Set the [[MemoryStore]] used by this manager to evict cached blocks.
+    * This must be set after construction due to initialization ordering constraints.
+    */
   final def setMemoryStore(store: MemoryStore): Unit = {
     _memoryStore = store
   }
 
   /**
-   * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
-   *
-   * @return whether all N bytes were successfully granted.
-   */
+    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
+    *
+    * @return whether all N bytes were successfully granted.
+    */
   def acquireMemory(blockId: BlockId, numBytes: Long): Boolean = lock.synchronized {
     val numBytesToFree = math.max(0, numBytes - memoryFree)
     acquireMemory(blockId, numBytes, numBytesToFree)
   }
 
   /**
-   * Acquire N bytes of storage memory for the given block, evicting existing ones if necessary.
-   *
-   * @param blockId the ID of the block we are acquiring storage memory for
-   * @param numBytesToAcquire the size of this block
-   * @param numBytesToFree the amount of space to be freed through evicting blocks
-   * @return whether all N bytes were successfully granted.
-   */
+    * Acquire N bytes of storage memory for the given block, evicting existing ones if necessary.
+    *
+    * @param blockId           the ID of the block we are acquiring storage memory for
+    * @param numBytesToAcquire the size of this block
+    * @param numBytesToFree    the amount of space to be freed through evicting blocks
+    * @return whether all N bytes were successfully granted.
+    */
   def acquireMemory(
-      blockId: BlockId,
-      numBytesToAcquire: Long,
-      numBytesToFree: Long): Boolean = lock.synchronized {
+                     blockId: BlockId,
+                     numBytesToAcquire: Long,
+                     numBytesToFree: Long): Boolean = lock.synchronized {
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
@@ -99,6 +87,10 @@ private[memory] class StorageMemoryPool(
       _memoryUsed += numBytesToAcquire
     }
     enoughMemory
+  }
+
+  override def memoryUsed: Long = lock.synchronized {
+    _memoryUsed
   }
 
   def releaseMemory(size: Long): Unit = lock.synchronized {
@@ -116,11 +108,11 @@ private[memory] class StorageMemoryPool(
   }
 
   /**
-   * Free space to shrink the size of this storage memory pool by `spaceToFree` bytes.
-   * Note: this method doesn't actually reduce the pool size but relies on the caller to do so.
-   *
-   * @return number of bytes to be removed from the pool's capacity.
-   */
+    * Free space to shrink the size of this storage memory pool by `spaceToFree` bytes.
+    * Note: this method doesn't actually reduce the pool size but relies on the caller to do so.
+    *
+    * @return number of bytes to be removed from the pool's capacity.
+    */
   def freeSpaceToShrinkPool(spaceToFree: Long): Long = lock.synchronized {
     val spaceFreedByReleasingUnusedMemory = math.min(spaceToFree, memoryFree)
     val remainingSpaceToFree = spaceToFree - spaceFreedByReleasingUnusedMemory
@@ -134,5 +126,12 @@ private[memory] class StorageMemoryPool(
     } else {
       spaceFreedByReleasingUnusedMemory
     }
+  }
+
+  def memoryStore: MemoryStore = {
+    if (_memoryStore == null) {
+      throw new IllegalStateException("memory store not initialized yet")
+    }
+    _memoryStore
   }
 }

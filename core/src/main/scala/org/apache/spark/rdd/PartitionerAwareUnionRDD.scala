@@ -19,20 +19,20 @@ package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
 
+import org.apache.spark.util.Utils
+import org.apache.spark.{OneToOneDependency, Partition, SparkContext, TaskContext}
+
 import scala.reflect.ClassTag
 
-import org.apache.spark.{OneToOneDependency, Partition, SparkContext, TaskContext}
-import org.apache.spark.util.Utils
-
 /**
- * Class representing partitions of PartitionerAwareUnionRDD, which maintains the list of
- * corresponding partitions of parent RDDs.
- */
+  * Class representing partitions of PartitionerAwareUnionRDD, which maintains the list of
+  * corresponding partitions of parent RDDs.
+  */
 private[spark]
 class PartitionerAwareUnionRDDPartition(
-    @transient val rdds: Seq[RDD[_]],
-    override val index: Int
-  ) extends Partition {
+                                         @transient val rdds: Seq[RDD[_]],
+                                         override val index: Int
+                                       ) extends Partition {
   var parents = rdds.map(_.partitions(index)).toArray
 
   override def hashCode(): Int = index
@@ -48,18 +48,18 @@ class PartitionerAwareUnionRDDPartition(
 }
 
 /**
- * Class representing an RDD that can take multiple RDDs partitioned by the same partitioner and
- * unify them into a single RDD while preserving the partitioner. So m RDDs with p partitions each
- * will be unified to a single RDD with p partitions and the same partitioner. The preferred
- * location for each partition of the unified RDD will be the most common preferred location
- * of the corresponding partitions of the parent RDDs. For example, location of partition 0
- * of the unified RDD will be where most of partition 0 of the parent RDDs are located.
- */
+  * Class representing an RDD that can take multiple RDDs partitioned by the same partitioner and
+  * unify them into a single RDD while preserving the partitioner. So m RDDs with p partitions each
+  * will be unified to a single RDD with p partitions and the same partitioner. The preferred
+  * location for each partition of the unified RDD will be the most common preferred location
+  * of the corresponding partitions of the parent RDDs. For example, location of partition 0
+  * of the unified RDD will be where most of partition 0 of the parent RDDs are located.
+  */
 private[spark]
 class PartitionerAwareUnionRDD[T: ClassTag](
-    sc: SparkContext,
-    var rdds: Seq[RDD[T]]
-  ) extends RDD[T](sc, rdds.map(x => new OneToOneDependency(x))) {
+                                             sc: SparkContext,
+                                             var rdds: Seq[RDD[T]]
+                                           ) extends RDD[T](sc, rdds.map(x => new OneToOneDependency(x))) {
   require(rdds.nonEmpty)
   require(rdds.forall(_.partitioner.isDefined))
   require(rdds.flatMap(_.partitioner).toSet.size == 1,
@@ -94,6 +94,11 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     location.toSeq
   }
 
+  // Get the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
+  private def currPrefLocs(rdd: RDD[_], part: Partition): Seq[String] = {
+    rdd.context.getPreferredLocs(rdd, part.index).map(tl => tl.host)
+  }
+
   override def compute(s: Partition, context: TaskContext): Iterator[T] = {
     val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents
     rdds.zip(parentPartitions).iterator.flatMap {
@@ -104,10 +109,5 @@ class PartitionerAwareUnionRDD[T: ClassTag](
   override def clearDependencies() {
     super.clearDependencies()
     rdds = null
-  }
-
-  // Get the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
-  private def currPrefLocs(rdd: RDD[_], part: Partition): Seq[String] = {
-    rdd.context.getPreferredLocs(rdd, part.index).map(tl => tl.host)
   }
 }

@@ -22,20 +22,19 @@ import org.apache.hadoop.io.{Text, Writable}
 import org.apache.hadoop.mapreduce.InputSplit
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.task.JobContextImpl
-
-import org.apache.spark.{Partition, SparkContext}
 import org.apache.spark.input.WholeTextFileInputFormat
+import org.apache.spark.{Partition, SparkContext}
 
 /**
- * An RDD that reads a bunch of text files in, and each text file becomes one record.
- */
+  * An RDD that reads a bunch of text files in, and each text file becomes one record.
+  */
 private[spark] class WholeTextFileRDD(
-    sc : SparkContext,
-    inputFormatClass: Class[_ <: WholeTextFileInputFormat],
-    keyClass: Class[Text],
-    valueClass: Class[Text],
-    conf: Configuration,
-    minPartitions: Int)
+                                       sc: SparkContext,
+                                       inputFormatClass: Class[_ <: WholeTextFileInputFormat],
+                                       keyClass: Class[Text],
+                                       valueClass: Class[Text],
+                                       conf: Configuration,
+                                       minPartitions: Int)
   extends NewHadoopRDD[Text, Text](sc, inputFormatClass, keyClass, valueClass, conf) {
 
   override def getPartitions: Array[Partition] = {

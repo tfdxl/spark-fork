@@ -20,21 +20,21 @@ package org.apache.spark.input
 import java.io.IOException
 
 import org.apache.hadoop.fs.FSDataInputStream
-import org.apache.hadoop.io.{BytesWritable, LongWritable}
 import org.apache.hadoop.io.compress.CompressionCodecFactory
-import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
+import org.apache.hadoop.io.{BytesWritable, LongWritable}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
+import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
 
 /**
- * FixedLengthBinaryRecordReader is returned by FixedLengthBinaryInputFormat.
- * It uses the record length set in FixedLengthBinaryInputFormat to
- * read one record at a time from the given InputSplit.
- *
- * Each call to nextKeyValue() updates the LongWritable key and BytesWritable value.
- *
- * key = record index (Long)
- * value = the record itself (BytesWritable)
- */
+  * FixedLengthBinaryRecordReader is returned by FixedLengthBinaryInputFormat.
+  * It uses the record length set in FixedLengthBinaryInputFormat to
+  * read one record at a time from the given InputSplit.
+  *
+  * Each call to nextKeyValue() updates the LongWritable key and BytesWritable value.
+  *
+  * key = record index (Long)
+  * value = the record itself (BytesWritable)
+  */
 private[spark] class FixedLengthBinaryRecordReader
   extends RecordReader[LongWritable, BytesWritable] {
 

@@ -19,36 +19,35 @@ package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
 
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
+import org.apache.spark._
+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.concurrent.forkjoin.ForkJoinPool
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.Utils
-
 /**
- * Partition for UnionRDD.
- *
- * @param idx index of the partition
- * @param rdd the parent RDD this partition refers to
- * @param parentRddIndex index of the parent RDD this partition refers to
- * @param parentRddPartitionIndex index of the partition within the parent RDD
- *                                this partition refers to
- */
+  * Partition for UnionRDD.
+  *
+  * @param idx                     index of the partition
+  * @param rdd                     the parent RDD this partition refers to
+  * @param parentRddIndex          index of the parent RDD this partition refers to
+  * @param parentRddPartitionIndex index of the partition within the parent RDD
+  *                                this partition refers to
+  */
 private[spark] class UnionPartition[T: ClassTag](
-    idx: Int,
-    @transient private val rdd: RDD[T],
-    val parentRddIndex: Int,
-    @transient private val parentRddPartitionIndex: Int)
+                                                  idx: Int,
+                                                  @transient private val rdd: RDD[T],
+                                                  val parentRddIndex: Int,
+                                                  @transient private val parentRddPartitionIndex: Int)
   extends Partition {
 
+  override val index: Int = idx
   var parentPartition: Partition = rdd.partitions(parentRddPartitionIndex)
 
   def preferredLocations(): Seq[String] = rdd.preferredLocations(parentPartition)
-
-  override val index: Int = idx
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
@@ -65,9 +64,9 @@ object UnionRDD {
 
 @DeveloperApi
 class UnionRDD[T: ClassTag](
-    sc: SparkContext,
-    var rdds: Seq[RDD[T]])
-  extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
+                             sc: SparkContext,
+                             var rdds: Seq[RDD[T]])
+  extends RDD[T](sc, Nil) { // Nil since we implement getDependencies
 
   // visible for testing
   private[spark] val isPartitionListingParallel: Boolean =

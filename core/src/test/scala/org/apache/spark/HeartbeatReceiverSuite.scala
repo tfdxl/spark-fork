@@ -19,15 +19,6 @@ package org.apache.spark
 
 import java.util.concurrent.{ExecutorService, TimeUnit}
 
-import scala.collection.mutable
-import scala.concurrent.Future
-import scala.concurrent.duration._
-
-import org.mockito.Matchers
-import org.mockito.Matchers._
-import org.mockito.Mockito.{mock, spy, verify, when}
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
-
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
@@ -35,34 +26,40 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{ManualClock, ThreadUtils}
+import org.mockito.Matchers
+import org.mockito.Matchers._
+import org.mockito.Mockito.{mock, spy, verify, when}
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+
+import scala.collection.mutable
+import scala.concurrent.Future
+import scala.concurrent.duration._
 
 /**
- * A test suite for the heartbeating behavior between the driver and the executors.
- */
+  * A test suite for the heartbeating behavior between the driver and the executors.
+  */
 class HeartbeatReceiverSuite
   extends SparkFunSuite
-  with BeforeAndAfterEach
-  with PrivateMethodTester
-  with LocalSparkContext {
+    with BeforeAndAfterEach
+    with PrivateMethodTester
+    with LocalSparkContext {
 
   private val executorId1 = "1"
   private val executorId2 = "2"
-
+  // Helper private method accessors for HeartbeatReceiver
+  private val _executorLastSeen = PrivateMethod[collection.Map[String, Long]]('executorLastSeen)
+  private val _executorTimeoutMs = PrivateMethod[Long]('executorTimeoutMs)
+  private val _killExecutorThread = PrivateMethod[ExecutorService]('killExecutorThread)
   // Shared state that must be reset before and after each test
   private var scheduler: TaskSchedulerImpl = null
   private var heartbeatReceiver: HeartbeatReceiver = null
   private var heartbeatReceiverRef: RpcEndpointRef = null
   private var heartbeatReceiverClock: ManualClock = null
 
-  // Helper private method accessors for HeartbeatReceiver
-  private val _executorLastSeen = PrivateMethod[collection.Map[String, Long]]('executorLastSeen)
-  private val _executorTimeoutMs = PrivateMethod[Long]('executorTimeoutMs)
-  private val _killExecutorThread = PrivateMethod[ExecutorService]('killExecutorThread)
-
   /**
-   * Before each test, set up the SparkContext and a custom [[HeartbeatReceiver]]
-   * that uses a manual clock.
-   */
+    * Before each test, set up the SparkContext and a custom [[HeartbeatReceiver]]
+    * that uses a manual clock.
+    */
   override def beforeEach(): Unit = {
     super.beforeEach()
     val conf = new SparkConf()
@@ -81,8 +78,8 @@ class HeartbeatReceiverSuite
   }
 
   /**
-   * After each test, clean up all state and stop the [[SparkContext]].
-   */
+    * After each test, clean up all state and stop the [[SparkContext]].
+    */
   override def afterEach(): Unit = {
     super.afterEach()
     scheduler = null
@@ -209,8 +206,8 @@ class HeartbeatReceiverSuite
 
   /** Manually send a heartbeat and return the response. */
   private def triggerHeartbeat(
-      executorId: String,
-      executorShouldReregister: Boolean): Unit = {
+                                executorId: String,
+                                executorShouldReregister: Boolean): Unit = {
     val metrics = TaskMetrics.empty
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
     val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
@@ -252,8 +249,8 @@ class HeartbeatReceiverSuite
 // TODO: use these classes to add end-to-end tests for dynamic allocation!
 
 /**
- * Dummy RPC endpoint to simulate executors.
- */
+  * Dummy RPC endpoint to simulate executors.
+  */
 private class FakeExecutorEndpoint(override val rpcEnv: RpcEnv) extends RpcEndpoint {
 
   override def receive: PartialFunction[Any, Unit] = {
@@ -262,12 +259,12 @@ private class FakeExecutorEndpoint(override val rpcEnv: RpcEnv) extends RpcEndpo
 }
 
 /**
- * Dummy scheduler backend to simulate executor allocation requests to the cluster manager.
- */
+  * Dummy scheduler backend to simulate executor allocation requests to the cluster manager.
+  */
 private class FakeSchedulerBackend(
-    scheduler: TaskSchedulerImpl,
-    rpcEnv: RpcEnv,
-    clusterManagerEndpoint: RpcEndpointRef)
+                                    scheduler: TaskSchedulerImpl,
+                                    rpcEnv: RpcEnv,
+                                    clusterManagerEndpoint: RpcEndpointRef)
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
 
   protected override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
@@ -281,13 +278,14 @@ private class FakeSchedulerBackend(
 }
 
 /**
- * Dummy cluster manager to simulate responses to executor allocation requests.
- */
+  * Dummy cluster manager to simulate responses to executor allocation requests.
+  */
 private class FakeClusterManager(override val rpcEnv: RpcEnv) extends RpcEndpoint {
-  private var targetNumExecutors = 0
   private val executorIdsToKill = new mutable.HashSet[String]
+  private var targetNumExecutors = 0
 
   def getTargetNumExecutors: Int = targetNumExecutors
+
   def getExecutorIdsToKill: Set[String] = executorIdsToKill.toSet
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

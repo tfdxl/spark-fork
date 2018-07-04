@@ -19,23 +19,22 @@ package org.apache.spark.rdd
 
 import java.util.concurrent.Semaphore
 
-import scala.concurrent._
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
-
+import org.apache.spark._
+import org.apache.spark.util.ThreadUtils
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark._
-import org.apache.spark.util.ThreadUtils
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent._
+import scala.concurrent.duration.Duration
 
 class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with TimeLimits {
-
-  @transient private var sc: SparkContext = _
+  lazy val zeroPartRdd = new EmptyRDD[Int](sc)
 
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
+  @transient private var sc: SparkContext = _
 
   override def beforeAll() {
     super.beforeAll()
@@ -50,8 +49,6 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       super.afterAll()
     }
   }
-
-  lazy val zeroPartRdd = new EmptyRDD[Int](sc)
 
   test("countAsync") {
     assert(zeroPartRdd.countAsync().get() === 0)
@@ -92,6 +89,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       assert(saw == expected, "incorrect result for rdd with %d partitions (expected %s, saw %s)"
         .format(rdd.partitions.size, expected, saw))
     }
+
     val input = Range(1, 1000)
 
     var rdd = sc.parallelize(input, 1)
@@ -116,9 +114,9 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   }
 
   /**
-   * Make sure onComplete, onSuccess, and onFailure are invoked correctly in the case
-   * of a successful job execution.
-   */
+    * Make sure onComplete, onSuccess, and onFailure are invoked correctly in the case
+    * of a successful job execution.
+    */
   test("async success handling") {
     val f = sc.parallelize(1 to 10, 2).countAsync()
 
@@ -148,9 +146,9 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   }
 
   /**
-   * Make sure onComplete, onSuccess, and onFailure are invoked correctly in the case
-   * of a failed job execution.
-   */
+    * Make sure onComplete, onSuccess, and onFailure are invoked correctly in the case
+    * of a failed job execution.
+    */
   test("async failure handling") {
     val f = sc.parallelize(1 to 10, 2).map { i =>
       throw new Exception("intentional"); i
@@ -184,24 +182,26 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   }
 
   /**
-   * Awaiting FutureAction results
-   */
+    * Awaiting FutureAction results
+    */
   test("FutureAction result, infinite wait") {
     val f = sc.parallelize(1 to 100, 4)
-              .countAsync()
+      .countAsync()
     assert(ThreadUtils.awaitResult(f, Duration.Inf) === 100)
   }
 
   test("FutureAction result, finite wait") {
     val f = sc.parallelize(1 to 100, 4)
-              .countAsync()
+      .countAsync()
     assert(ThreadUtils.awaitResult(f, Duration(30, "seconds")) === 100)
   }
 
   test("FutureAction result, timeout") {
     val f = sc.parallelize(1 to 100, 4)
-              .mapPartitions(itr => { Thread.sleep(20); itr })
-              .countAsync()
+      .mapPartitions(itr => {
+        Thread.sleep(20); itr
+      })
+      .countAsync()
     intercept[TimeoutException] {
       ThreadUtils.awaitResult(f, Duration(20, "milliseconds"))
     }
@@ -213,11 +213,12 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       override def execute(runnable: Runnable): Unit = {
         executionContextInvoked.success(())
       }
+
       override def reportFailure(t: Throwable): Unit = ()
     }
     val starter = Smuggle(new Semaphore(0))
     starter.drainPermits()
-    val rdd = sc.parallelize(1 to 100, 4).mapPartitions {itr => starter.acquire(1); itr}
+    val rdd = sc.parallelize(1 to 100, 4).mapPartitions { itr => starter.acquire(1); itr }
     val f = action(rdd)
     f.onComplete(_ => ())(fakeExecutionContext)
     // Here we verify that registering the callback didn't cause a thread to be consumed.

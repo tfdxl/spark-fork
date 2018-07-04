@@ -23,13 +23,13 @@ import org.apache.spark.util.Utils
 
 @DeveloperApi
 class RDDInfo(
-    val id: Int,
-    var name: String,
-    val numPartitions: Int,
-    var storageLevel: StorageLevel,
-    val parentIds: Seq[Int],
-    val callSite: String = "",
-    val scope: Option[RDDOperationScope] = None)
+               val id: Int,
+               var name: String,
+               val numPartitions: Int,
+               var storageLevel: StorageLevel,
+               val parentIds: Seq[Int],
+               val callSite: String = "",
+               val scope: Option[RDDOperationScope] = None)
   extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0
@@ -43,8 +43,8 @@ class RDDInfo(
     import Utils.bytesToString
     ("RDD \"%s\" (%d) StorageLevel: %s; CachedPartitions: %d; TotalPartitions: %d; " +
       "MemorySize: %s; DiskSize: %s").format(
-        name, id, storageLevel.toString, numCachedPartitions, numPartitions,
-        bytesToString(memSize), bytesToString(diskSize))
+      name, id, storageLevel.toString, numCachedPartitions, numPartitions,
+      bytesToString(memSize), bytesToString(diskSize))
   }
 
   override def compare(that: RDDInfo): Int = {

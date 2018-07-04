@@ -17,34 +17,34 @@
 
 package org.apache.spark.network
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.storage.{BlockId, StorageLevel}
+
+import scala.reflect.ClassTag
 
 private[spark]
 trait BlockDataManager {
 
   /**
-   * Interface to get local block data. Throws an exception if the block cannot be found or
-   * cannot be read successfully.
-   */
+    * Interface to get local block data. Throws an exception if the block cannot be found or
+    * cannot be read successfully.
+    */
   def getBlockData(blockId: BlockId): ManagedBuffer
 
   /**
-   * Put the block locally, using the given storage level.
-   *
-   * Returns true if the block was stored and false if the put operation failed or the block
-   * already existed.
-   */
+    * Put the block locally, using the given storage level.
+    *
+    * Returns true if the block was stored and false if the put operation failed or the block
+    * already existed.
+    */
   def putBlockData(
-      blockId: BlockId,
-      data: ManagedBuffer,
-      level: StorageLevel,
-      classTag: ClassTag[_]): Boolean
+                    blockId: BlockId,
+                    data: ManagedBuffer,
+                    level: StorageLevel,
+                    classTag: ClassTag[_]): Boolean
 
   /**
-   * Release locks acquired by [[putBlockData()]] and [[getBlockData()]].
-   */
+    * Release locks acquired by [[putBlockData()]] and [[getBlockData()]].
+    */
   def releaseLock(blockId: BlockId, taskAttemptId: Option[Long]): Unit
 }

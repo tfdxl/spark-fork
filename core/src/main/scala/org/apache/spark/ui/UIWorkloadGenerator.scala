@@ -19,17 +19,17 @@ package org.apache.spark.ui
 
 import java.util.concurrent.Semaphore
 
-import scala.util.Random
-
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.scheduler.SchedulingMode
+import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.util.Random
 
 // scalastyle:off
 /**
- * Continuously generates jobs that expose various features of the WebUI (internal testing tool).
- *
- * Usage: ./bin/spark-class org.apache.spark.ui.UIWorkloadGenerator [master] [FIFO|FAIR] [#job set (4 jobs per set)]
- */
+  * Continuously generates jobs that expose various features of the WebUI (internal testing tool).
+  *
+  * Usage: ./bin/spark-class org.apache.spark.ui.UIWorkloadGenerator [master] [FIFO|FAIR] [#job set (4 jobs per set)]
+  */
 // scalastyle:on
 private[spark] object UIWorkloadGenerator {
 
@@ -63,6 +63,7 @@ private[spark] object UIWorkloadGenerator {
     }
 
     val baseData = sc.makeRDD(1 to NUM_PARTITIONS * 10, NUM_PARTITIONS)
+
     def nextFloat(): Float = new Random().nextFloat()
 
     val jobs = Seq[(String, () => Long)](
@@ -71,7 +72,7 @@ private[spark] object UIWorkloadGenerator {
       ("Single Shuffle", () => baseData.map(x => (x % 10, x)).reduceByKey(_ + _).count),
       ("Entirely failed phase", () => baseData.map { x => throw new Exception(); 1 }.count),
       ("Partially failed phase", () => {
-        baseData.map{x =>
+        baseData.map { x =>
           val probFailure = (4.0 / NUM_PARTITIONS)
           if (nextFloat() < probFailure) {
             throw new Exception("This is a task failure")
@@ -80,7 +81,7 @@ private[spark] object UIWorkloadGenerator {
         }.count
       }),
       ("Partially failed phase (longer tasks)", () => {
-        baseData.map{x =>
+        baseData.map { x =>
           val probFailure = (4.0 / NUM_PARTITIONS)
           if (nextFloat() < probFailure) {
             Thread.sleep(100)

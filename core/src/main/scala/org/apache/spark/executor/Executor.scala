@@ -24,14 +24,9 @@ import java.net.{URI, URL}
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent._
-import javax.annotation.concurrent.GuardedBy
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
-import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-
+import javax.annotation.concurrent.GuardedBy
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -44,20 +39,24 @@ import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.util.control.NonFatal
+
 /**
- * Spark executor, backed by a threadpool to run tasks.
- *
- * This can be used with Mesos, YARN, and the standalone scheduler.
- * An internal RPC interface is used for communication with the driver,
- * except in the case of Mesos fine-grained mode.
- */
+  * Spark executor, backed by a threadpool to run tasks.
+  *
+  * This can be used with Mesos, YARN, and the standalone scheduler.
+  * An internal RPC interface is used for communication with the driver,
+  * except in the case of Mesos fine-grained mode.
+  */
 private[spark] class Executor(
-    executorId: String,
-    executorHostname: String,
-    env: SparkEnv,
-    userClassPath: Seq[URL] = Nil,
-    isLocal: Boolean = false,
-    uncaughtExceptionHandler: UncaughtExceptionHandler = new SparkUncaughtExceptionHandler)
+                               executorId: String,
+                               executorHostname: String,
+                               env: SparkEnv,
+                               userClassPath: Seq[URL] = Nil,
+                               isLocal: Boolean = false,
+                               uncaughtExceptionHandler: UncaughtExceptionHandler = new SparkUncaughtExceptionHandler)
   extends Logging {
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
@@ -74,7 +73,7 @@ private[spark] class Executor(
   // No ip or host:port - just hostname
   Utils.checkHost(executorHostname)
   // must not have port specified.
-  assert (0 == Utils.parseHostPort(executorHostname)._2)
+  assert(0 == Utils.parseHostPort(executorHostname)._2)
 
   // Make sure the local hostname we report matches the cluster scheduler's name for this host
   Utils.setCustomHostname(executorHostname)
@@ -93,9 +92,9 @@ private[spark] class Executor(
       .setNameFormat("Executor task launch worker-%d")
       .setThreadFactory(new ThreadFactory {
         override def newThread(r: Runnable): Thread =
-          // Use UninterruptibleThread to run tasks so that we can allow running codes without being
-          // interrupted by `Thread.interrupt()`. Some issues, such as KAFKA-1894, HADOOP-10622,
-          // will hang forever if some methods are interrupted.
+        // Use UninterruptibleThread to run tasks so that we can allow running codes without being
+        // interrupted by `Thread.interrupt()`. Some issues, such as KAFKA-1894, HADOOP-10622,
+        // will hang forever if some methods are interrupted.
           new UninterruptibleThread(r, "unused") // thread name will be set by ThreadFactoryBuilder
       })
       .build()
@@ -155,26 +154,36 @@ private[spark] class Executor(
     RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
   /**
-   * When an executor is unable to send heartbeats to the driver more than `HEARTBEAT_MAX_FAILURES`
-   * times, it should kill itself. The default value is 60. It means we will retry to send
-   * heartbeats about 10 minutes because the heartbeat interval is 10s.
-   */
+    * When an executor is unable to send heartbeats to the driver more than `HEARTBEAT_MAX_FAILURES`
+    * times, it should kill itself. The default value is 60. It means we will retry to send
+    * heartbeats about 10 minutes because the heartbeat interval is 10s.
+    */
   private val HEARTBEAT_MAX_FAILURES = conf.getInt("spark.executor.heartbeat.maxFailures", 60)
 
   /**
-   * Count the failure times of heartbeat. It should only be accessed in the heartbeat thread. Each
-   * successful heartbeat will reset it to 0.
-   */
+    * Count the failure times of heartbeat. It should only be accessed in the heartbeat thread. Each
+    * successful heartbeat will reset it to 0.
+    */
   private var heartbeatFailures = 0
 
   startDriverHeartbeater()
-
-  private[executor] def numRunningTasks: Int = runningTasks.size()
 
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
     threadPool.execute(tr)
+  }
+
+  /**
+    * Function to kill the running tasks in an executor.
+    * This can be called by executor back-ends to kill the
+    * tasks instead of taking the JVM down.
+    *
+    * @param interruptThread whether to interrupt the task thread
+    */
+  def killAllTasks(interruptThread: Boolean, reason: String): Unit = {
+    runningTasks.keys().asScala.foreach(t =>
+      killTask(t, interruptThread = interruptThread, reason = reason))
   }
 
   def killTask(taskId: Long, interruptThread: Boolean, reason: String): Unit = {
@@ -203,17 +212,6 @@ private[spark] class Executor(
     }
   }
 
-  /**
-   * Function to kill the running tasks in an executor.
-   * This can be called by executor back-ends to kill the
-   * tasks instead of taking the JVM down.
-   * @param interruptThread whether to interrupt the task thread
-   */
-  def killAllTasks(interruptThread: Boolean, reason: String) : Unit = {
-    runningTasks.keys().asScala.foreach(t =>
-      killTask(t, interruptThread = interruptThread, reason = reason))
-  }
-
   def stop(): Unit = {
     env.metricsSystem.report()
     heartbeater.shutdown()
@@ -224,41 +222,178 @@ private[spark] class Executor(
     }
   }
 
+  private[executor] def numRunningTasks: Int = runningTasks.size()
+
+  /**
+    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
+    * created by the interpreter to the search path
+    */
+  private def createClassLoader(): MutableURLClassLoader = {
+    // Bootstrap the list of jars with the user class path.
+    val now = System.currentTimeMillis()
+    userClassPath.foreach { url =>
+      currentJars(url.getPath().split("/").last) = now
+    }
+
+    val currentLoader = Utils.getContextOrSparkClassLoader
+
+    // For each of the jars in the jarSet, add them to the class loader.
+    // We assume each of the files has already been fetched.
+    val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
+      new File(uri.split("/").last).toURI.toURL
+    }
+    if (userClassPathFirst) {
+      new ChildFirstURLClassLoader(urls, currentLoader)
+    } else {
+      new MutableURLClassLoader(urls, currentLoader)
+    }
+  }
+
+  /**
+    * If the REPL is in use, add another ClassLoader that will read
+    * new classes defined by the REPL as the user types code
+    */
+  private def addReplClassLoaderIfNeeded(parent: ClassLoader): ClassLoader = {
+    val classUri = conf.get("spark.repl.class.uri", null)
+    if (classUri != null) {
+      logInfo("Using REPL class URI: " + classUri)
+      try {
+        val _userClassPathFirst: java.lang.Boolean = userClassPathFirst
+        val klass = Utils.classForName("org.apache.spark.repl.ExecutorClassLoader")
+          .asInstanceOf[Class[_ <: ClassLoader]]
+        val constructor = klass.getConstructor(classOf[SparkConf], classOf[SparkEnv],
+          classOf[String], classOf[ClassLoader], classOf[Boolean])
+        constructor.newInstance(conf, env, classUri, parent, _userClassPathFirst)
+      } catch {
+        case _: ClassNotFoundException =>
+          logError("Could not find org.apache.spark.repl.ExecutorClassLoader on classpath!")
+          System.exit(1)
+          null
+      }
+    } else {
+      parent
+    }
+  }
+
+  /**
+    * Download any missing dependencies if we receive a new set of files and JARs from the
+    * SparkContext. Also adds any new JARs we fetched to the class loader.
+    */
+  private def updateDependencies(newFiles: Map[String, Long], newJars: Map[String, Long]) {
+    lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    synchronized {
+      // Fetch missing dependencies
+      for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
+        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        // Fetch file with useCache mode, close cache for local mode.
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
+          env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
+        currentFiles(name) = timestamp
+      }
+      for ((name, timestamp) <- newJars) {
+        val localName = new URI(name).getPath.split("/").last
+        val currentTimeStamp = currentJars.get(name)
+          .orElse(currentJars.get(localName))
+          .getOrElse(-1L)
+        if (currentTimeStamp < timestamp) {
+          logInfo("Fetching " + name + " with timestamp " + timestamp)
+          // Fetch file with useCache mode, close cache for local mode.
+          Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
+            env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
+          currentJars(name) = timestamp
+          // Add it to our class loader
+          val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
+          if (!urlClassLoader.getURLs().contains(url)) {
+            logInfo("Adding " + url + " to class loader")
+            urlClassLoader.addURL(url)
+          }
+        }
+      }
+    }
+  }
+
+  /**
+    * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
+    */
+  private def startDriverHeartbeater(): Unit = {
+    val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
+
+    // Wait a random interval so the heartbeats don't end up in sync
+    val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
+
+    val heartbeatTask = new Runnable() {
+      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat())
+    }
+    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
+  }
+
+  /** Reports heartbeat and metrics for active tasks to the driver. */
+  private def reportHeartBeat(): Unit = {
+    // list of (task id, accumUpdates) to send back to the driver
+    val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulatorV2[_, _]])]()
+    val curGCTime = computeTotalGcTime()
+
+    for (taskRunner <- runningTasks.values().asScala) {
+      if (taskRunner.task != null) {
+        taskRunner.task.metrics.mergeShuffleReadMetrics()
+        taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
+        accumUpdates += ((taskRunner.taskId, taskRunner.task.metrics.accumulators()))
+      }
+    }
+
+    val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
+    try {
+      val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
+        message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
+      if (response.reregisterBlockManager) {
+        logInfo("Told to re-register on heartbeat")
+        env.blockManager.reregister()
+      }
+      heartbeatFailures = 0
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Issue communicating with driver in heartbeater", e)
+        heartbeatFailures += 1
+        if (heartbeatFailures >= HEARTBEAT_MAX_FAILURES) {
+          logError(s"Exit as unable to send heartbeats to driver " +
+            s"more than $HEARTBEAT_MAX_FAILURES times")
+          System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
+        }
+    }
+  }
+
   /** Returns the total amount of time this JVM process has spent in garbage collection. */
   private def computeTotalGcTime(): Long = {
     ManagementFactory.getGarbageCollectorMXBeans.asScala.map(_.getCollectionTime).sum
   }
 
   class TaskRunner(
-      execBackend: ExecutorBackend,
-      private val taskDescription: TaskDescription)
+                    execBackend: ExecutorBackend,
+                    private val taskDescription: TaskDescription)
     extends Runnable {
 
     val taskId = taskDescription.taskId
     val threadName = s"Executor task launch worker for task $taskId"
     private val taskName = taskDescription.name
-
+    /** How much the JVM process has spent in GC when the task starts to run. */
+    @volatile var startGCTime: Long = _
+    /**
+      * The task to run. This will be set in run() by deserializing the task binary coming
+      * from the driver. Once it is set, it will never be changed.
+      */
+    @volatile var task: Task[Any] = _
     /** If specified, this task has been killed and this option contains the reason. */
     @volatile private var reasonIfKilled: Option[String] = None
-
     @volatile private var threadId: Long = -1
-
-    def getThreadId: Long = threadId
-
     /** Whether this task has been finished. */
     @GuardedBy("TaskRunner.this")
     private var finished = false
 
-    def isFinished: Boolean = synchronized { finished }
+    def getThreadId: Long = threadId
 
-    /** How much the JVM process has spent in GC when the task starts to run. */
-    @volatile var startGCTime: Long = _
-
-    /**
-     * The task to run. This will be set in run() by deserializing the task binary coming
-     * from the driver. Once it is set, it will never be changed.
-     */
-    @volatile var task: Task[Any] = _
+    def isFinished: Boolean = synchronized {
+      finished
+    }
 
     def kill(interruptThread: Boolean, reason: String): Unit = {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId), reason: $reason")
@@ -270,43 +405,6 @@ private[spark] class Executor(
           }
         }
       }
-    }
-
-    /**
-     * Set the finished flag to true and clear the current thread's interrupt status
-     */
-    private def setTaskFinishedAndClearInterruptStatus(): Unit = synchronized {
-      this.finished = true
-      // SPARK-14234 - Reset the interrupted status of the thread to avoid the
-      // ClosedByInterruptException during execBackend.statusUpdate which causes
-      // Executor to crash
-      Thread.interrupted()
-      // Notify any waiting TaskReapers. Generally there will only be one reaper per task but there
-      // is a rare corner-case where one task can have two reapers in case cancel(interrupt=False)
-      // is followed by cancel(interrupt=True). Thus we use notifyAll() to avoid a lost wakeup:
-      notifyAll()
-    }
-
-    /**
-     *  Utility function to:
-     *    1. Report executor runtime and JVM gc time if possible
-     *    2. Collect accumulator updates
-     *    3. Set the finished flag to true and clear current thread's interrupt status
-     */
-    private def collectAccumulatorsAndResetStatusOnFailure(taskStartTime: Long) = {
-      // Report executor runtime and JVM gc time
-      Option(task).foreach(t => {
-        t.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStartTime)
-        t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
-      })
-
-      // Collect latest accumulator values to report back to the driver
-      val accums: Seq[AccumulatorV2[_, _]] =
-        Option(task).map(_.collectAccumulatorUpdates(taskFailed = true)).getOrElse(Seq.empty)
-      val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
-
-      setTaskFinishedAndClearInterruptStatus()
-      (accums, accUpdates)
     }
 
     override def run(): Unit = {
@@ -510,7 +608,7 @@ private[spark] class Executor(
           execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
 
         case _: InterruptedException | NonFatal(_) if
-            task != null && task.reasonIfKilled.isDefined =>
+        task != null && task.reasonIfKilled.isDefined =>
           val killReason = task.reasonIfKilled.getOrElse("unknown reason")
           logInfo(s"Executor interrupted and killed $taskName (TID $taskId), reason: $killReason")
 
@@ -576,38 +674,75 @@ private[spark] class Executor(
       }
     }
 
+    /**
+      * Utility function to:
+      *    1. Report executor runtime and JVM gc time if possible
+      *    2. Collect accumulator updates
+      *    3. Set the finished flag to true and clear current thread's interrupt status
+      */
+    private def collectAccumulatorsAndResetStatusOnFailure(taskStartTime: Long) = {
+      // Report executor runtime and JVM gc time
+      Option(task).foreach(t => {
+        t.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStartTime)
+        t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+      })
+
+      // Collect latest accumulator values to report back to the driver
+      val accums: Seq[AccumulatorV2[_, _]] =
+        Option(task).map(_.collectAccumulatorUpdates(taskFailed = true)).getOrElse(Seq.empty)
+      val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+
+      setTaskFinishedAndClearInterruptStatus()
+      (accums, accUpdates)
+    }
+
+    /**
+      * Set the finished flag to true and clear the current thread's interrupt status
+      */
+    private def setTaskFinishedAndClearInterruptStatus(): Unit = synchronized {
+      this.finished = true
+      // SPARK-14234 - Reset the interrupted status of the thread to avoid the
+      // ClosedByInterruptException during execBackend.statusUpdate which causes
+      // Executor to crash
+      Thread.interrupted()
+      // Notify any waiting TaskReapers. Generally there will only be one reaper per task but there
+      // is a rare corner-case where one task can have two reapers in case cancel(interrupt=False)
+      // is followed by cancel(interrupt=True). Thus we use notifyAll() to avoid a lost wakeup:
+      notifyAll()
+    }
+
     private def hasFetchFailure: Boolean = {
       task != null && task.context != null && task.context.fetchFailed.isDefined
     }
   }
 
   /**
-   * Supervises the killing / cancellation of a task by sending the interrupted flag, optionally
-   * sending a Thread.interrupt(), and monitoring the task until it finishes.
-   *
-   * Spark's current task cancellation / task killing mechanism is "best effort" because some tasks
-   * may not be interruptable or may not respond to their "killed" flags being set. If a significant
-   * fraction of a cluster's task slots are occupied by tasks that have been marked as killed but
-   * remain running then this can lead to a situation where new jobs and tasks are starved of
-   * resources that are being used by these zombie tasks.
-   *
-   * The TaskReaper was introduced in SPARK-18761 as a mechanism to monitor and clean up zombie
-   * tasks. For backwards-compatibility / backportability this component is disabled by default
-   * and must be explicitly enabled by setting `spark.task.reaper.enabled=true`.
-   *
-   * A TaskReaper is created for a particular task when that task is killed / cancelled. Typically
-   * a task will have only one TaskReaper, but it's possible for a task to have up to two reapers
-   * in case kill is called twice with different values for the `interrupt` parameter.
-   *
-   * Once created, a TaskReaper will run until its supervised task has finished running. If the
-   * TaskReaper has not been configured to kill the JVM after a timeout (i.e. if
-   * `spark.task.reaper.killTimeout < 0`) then this implies that the TaskReaper may run indefinitely
-   * if the supervised task never exits.
-   */
+    * Supervises the killing / cancellation of a task by sending the interrupted flag, optionally
+    * sending a Thread.interrupt(), and monitoring the task until it finishes.
+    *
+    * Spark's current task cancellation / task killing mechanism is "best effort" because some tasks
+    * may not be interruptable or may not respond to their "killed" flags being set. If a significant
+    * fraction of a cluster's task slots are occupied by tasks that have been marked as killed but
+    * remain running then this can lead to a situation where new jobs and tasks are starved of
+    * resources that are being used by these zombie tasks.
+    *
+    * The TaskReaper was introduced in SPARK-18761 as a mechanism to monitor and clean up zombie
+    * tasks. For backwards-compatibility / backportability this component is disabled by default
+    * and must be explicitly enabled by setting `spark.task.reaper.enabled=true`.
+    *
+    * A TaskReaper is created for a particular task when that task is killed / cancelled. Typically
+    * a task will have only one TaskReaper, but it's possible for a task to have up to two reapers
+    * in case kill is called twice with different values for the `interrupt` parameter.
+    *
+    * Once created, a TaskReaper will run until its supervised task has finished running. If the
+    * TaskReaper has not been configured to kill the JVM after a timeout (i.e. if
+    * `spark.task.reaper.killTimeout < 0`) then this implies that the TaskReaper may run indefinitely
+    * if the supervised task never exits.
+    */
   private class TaskReaper(
-      taskRunner: TaskRunner,
-      val interruptThread: Boolean,
-      val reason: String)
+                            taskRunner: TaskRunner,
+                            val interruptThread: Boolean,
+                            val reason: String)
     extends Runnable {
 
     private[this] val taskId: Long = taskRunner.taskId
@@ -622,8 +757,11 @@ private[spark] class Executor(
 
     override def run(): Unit = {
       val startTimeMs = System.currentTimeMillis()
+
       def elapsedTimeMs = System.currentTimeMillis() - startTimeMs
+
       def timeoutExceeded(): Boolean = killTimeoutMs > 0 && elapsedTimeMs > killTimeoutMs
+
       try {
         // Only attempt to kill the task once. If interruptThread = false then a second kill
         // attempt would be a no-op and if interruptThread = true then it may not be safe or
@@ -691,144 +829,6 @@ private[spark] class Executor(
         }
       }
     }
-  }
-
-  /**
-   * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
-   * created by the interpreter to the search path
-   */
-  private def createClassLoader(): MutableURLClassLoader = {
-    // Bootstrap the list of jars with the user class path.
-    val now = System.currentTimeMillis()
-    userClassPath.foreach { url =>
-      currentJars(url.getPath().split("/").last) = now
-    }
-
-    val currentLoader = Utils.getContextOrSparkClassLoader
-
-    // For each of the jars in the jarSet, add them to the class loader.
-    // We assume each of the files has already been fetched.
-    val urls = userClassPath.toArray ++ currentJars.keySet.map { uri =>
-      new File(uri.split("/").last).toURI.toURL
-    }
-    if (userClassPathFirst) {
-      new ChildFirstURLClassLoader(urls, currentLoader)
-    } else {
-      new MutableURLClassLoader(urls, currentLoader)
-    }
-  }
-
-  /**
-   * If the REPL is in use, add another ClassLoader that will read
-   * new classes defined by the REPL as the user types code
-   */
-  private def addReplClassLoaderIfNeeded(parent: ClassLoader): ClassLoader = {
-    val classUri = conf.get("spark.repl.class.uri", null)
-    if (classUri != null) {
-      logInfo("Using REPL class URI: " + classUri)
-      try {
-        val _userClassPathFirst: java.lang.Boolean = userClassPathFirst
-        val klass = Utils.classForName("org.apache.spark.repl.ExecutorClassLoader")
-          .asInstanceOf[Class[_ <: ClassLoader]]
-        val constructor = klass.getConstructor(classOf[SparkConf], classOf[SparkEnv],
-          classOf[String], classOf[ClassLoader], classOf[Boolean])
-        constructor.newInstance(conf, env, classUri, parent, _userClassPathFirst)
-      } catch {
-        case _: ClassNotFoundException =>
-          logError("Could not find org.apache.spark.repl.ExecutorClassLoader on classpath!")
-          System.exit(1)
-          null
-      }
-    } else {
-      parent
-    }
-  }
-
-  /**
-   * Download any missing dependencies if we receive a new set of files and JARs from the
-   * SparkContext. Also adds any new JARs we fetched to the class loader.
-   */
-  private def updateDependencies(newFiles: Map[String, Long], newJars: Map[String, Long]) {
-    lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
-    synchronized {
-      // Fetch missing dependencies
-      for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
-        logInfo("Fetching " + name + " with timestamp " + timestamp)
-        // Fetch file with useCache mode, close cache for local mode.
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
-          env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
-        currentFiles(name) = timestamp
-      }
-      for ((name, timestamp) <- newJars) {
-        val localName = new URI(name).getPath.split("/").last
-        val currentTimeStamp = currentJars.get(name)
-          .orElse(currentJars.get(localName))
-          .getOrElse(-1L)
-        if (currentTimeStamp < timestamp) {
-          logInfo("Fetching " + name + " with timestamp " + timestamp)
-          // Fetch file with useCache mode, close cache for local mode.
-          Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
-            env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
-          currentJars(name) = timestamp
-          // Add it to our class loader
-          val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
-          if (!urlClassLoader.getURLs().contains(url)) {
-            logInfo("Adding " + url + " to class loader")
-            urlClassLoader.addURL(url)
-          }
-        }
-      }
-    }
-  }
-
-  /** Reports heartbeat and metrics for active tasks to the driver. */
-  private def reportHeartBeat(): Unit = {
-    // list of (task id, accumUpdates) to send back to the driver
-    val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulatorV2[_, _]])]()
-    val curGCTime = computeTotalGcTime()
-
-    for (taskRunner <- runningTasks.values().asScala) {
-      if (taskRunner.task != null) {
-        taskRunner.task.metrics.mergeShuffleReadMetrics()
-        taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-        accumUpdates += ((taskRunner.taskId, taskRunner.task.metrics.accumulators()))
-      }
-    }
-
-    val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
-    try {
-      val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
-          message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
-      if (response.reregisterBlockManager) {
-        logInfo("Told to re-register on heartbeat")
-        env.blockManager.reregister()
-      }
-      heartbeatFailures = 0
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Issue communicating with driver in heartbeater", e)
-        heartbeatFailures += 1
-        if (heartbeatFailures >= HEARTBEAT_MAX_FAILURES) {
-          logError(s"Exit as unable to send heartbeats to driver " +
-            s"more than $HEARTBEAT_MAX_FAILURES times")
-          System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
-        }
-    }
-  }
-
-  /**
-   * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
-   */
-  private def startDriverHeartbeater(): Unit = {
-    val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
-
-    // Wait a random interval so the heartbeats don't end up in sync
-    val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
-
-    val heartbeatTask = new Runnable() {
-      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat())
-    }
-    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
 }
 

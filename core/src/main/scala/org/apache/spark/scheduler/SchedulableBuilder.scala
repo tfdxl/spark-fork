@@ -20,19 +20,19 @@ package org.apache.spark.scheduler
 import java.io.{FileInputStream, InputStream}
 import java.util.{Locale, NoSuchElementException, Properties}
 
-import scala.util.control.NonFatal
-import scala.xml.{Node, XML}
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 
+import scala.util.control.NonFatal
+import scala.xml.{Node, XML}
+
 /**
- * An interface to build Schedulable tree
- * buildPools: build the tree nodes(pools)
- * addTaskSetManager: build the leaf nodes(TaskSetManagers)
- */
+  * An interface to build Schedulable tree
+  * buildPools: build the tree nodes(pools)
+  * addTaskSetManager: build the leaf nodes(TaskSetManagers)
+  */
 private[spark] trait SchedulableBuilder {
   def rootPool: Pool
 
@@ -137,10 +137,10 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   }
 
   private def getSchedulingModeValue(
-      poolNode: Node,
-      poolName: String,
-      defaultValue: SchedulingMode,
-      fileName: String): SchedulingMode = {
+                                      poolNode: Node,
+                                      poolName: String,
+                                      defaultValue: SchedulingMode,
+                                      fileName: String): SchedulingMode = {
 
     val xmlSchedulingMode =
       (poolNode \ SCHEDULING_MODE_PROPERTY).text.trim.toUpperCase(Locale.ROOT)
@@ -162,11 +162,11 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   }
 
   private def getIntValue(
-      poolNode: Node,
-      poolName: String,
-      propertyName: String,
-      defaultValue: Int,
-      fileName: String): Int = {
+                           poolNode: Node,
+                           poolName: String,
+                           propertyName: String,
+                           defaultValue: Int,
+                           fileName: String): Int = {
 
     val data = (poolNode \ propertyName).text.trim
     try {
@@ -182,10 +182,10 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
 
   override def addTaskSetManager(manager: Schedulable, properties: Properties) {
     val poolName = if (properties != null) {
-        properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
-      } else {
-        DEFAULT_POOL_NAME
-      }
+      properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
+    } else {
+      DEFAULT_POOL_NAME
+    }
     var parentPool = rootPool.getSchedulableByName(poolName)
     if (parentPool == null) {
       // we will create a new pool that user has configured in app

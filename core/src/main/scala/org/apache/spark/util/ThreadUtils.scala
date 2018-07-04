@@ -20,12 +20,12 @@ package org.apache.spark.util
 import java.util.concurrent._
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor}
+import org.apache.spark.SparkException
+
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
+import scala.concurrent.{Awaitable, ExecutionContext, ExecutionContextExecutor}
 import scala.util.control.NonFatal
-
-import org.apache.spark.SparkException
 
 private[spark] object ThreadUtils {
 
@@ -33,34 +33,27 @@ private[spark] object ThreadUtils {
     ExecutionContext.fromExecutorService(MoreExecutors.sameThreadExecutor())
 
   /**
-   * An `ExecutionContextExecutor` that runs each task in the thread that invokes `execute/submit`.
-   * The caller should make sure the tasks running in this `ExecutionContextExecutor` are short and
-   * never block.
-   */
+    * An `ExecutionContextExecutor` that runs each task in the thread that invokes `execute/submit`.
+    * The caller should make sure the tasks running in this `ExecutionContextExecutor` are short and
+    * never block.
+    */
   def sameThread: ExecutionContextExecutor = sameThreadExecutionContext
 
   /**
-   * Create a thread factory that names threads with a prefix and also sets the threads to daemon.
-   */
-  def namedThreadFactory(prefix: String): ThreadFactory = {
-    new ThreadFactoryBuilder().setDaemon(true).setNameFormat(prefix + "-%d").build()
-  }
-
-  /**
-   * Wrapper over newCachedThreadPool. Thread names are formatted as prefix-ID, where ID is a
-   * unique, sequentially assigned integer.
-   */
+    * Wrapper over newCachedThreadPool. Thread names are formatted as prefix-ID, where ID is a
+    * unique, sequentially assigned integer.
+    */
   def newDaemonCachedThreadPool(prefix: String): ThreadPoolExecutor = {
     val threadFactory = namedThreadFactory(prefix)
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
 
   /**
-   * Create a cached thread pool whose max number of threads is `maxThreadNumber`. Thread names
-   * are formatted as prefix-ID, where ID is a unique, sequentially assigned integer.
-   */
+    * Create a cached thread pool whose max number of threads is `maxThreadNumber`. Thread names
+    * are formatted as prefix-ID, where ID is a unique, sequentially assigned integer.
+    */
   def newDaemonCachedThreadPool(
-      prefix: String, maxThreadNumber: Int, keepAliveSeconds: Int = 60): ThreadPoolExecutor = {
+                                 prefix: String, maxThreadNumber: Int, keepAliveSeconds: Int = 60): ThreadPoolExecutor = {
     val threadFactory = namedThreadFactory(prefix)
     val threadPool = new ThreadPoolExecutor(
       maxThreadNumber, // corePoolSize: the max number of threads to create before queuing the tasks
@@ -74,25 +67,32 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Wrapper over newFixedThreadPool. Thread names are formatted as prefix-ID, where ID is a
-   * unique, sequentially assigned integer.
-   */
+    * Wrapper over newFixedThreadPool. Thread names are formatted as prefix-ID, where ID is a
+    * unique, sequentially assigned integer.
+    */
   def newDaemonFixedThreadPool(nThreads: Int, prefix: String): ThreadPoolExecutor = {
     val threadFactory = namedThreadFactory(prefix)
     Executors.newFixedThreadPool(nThreads, threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
 
   /**
-   * Wrapper over newSingleThreadExecutor.
-   */
+    * Create a thread factory that names threads with a prefix and also sets the threads to daemon.
+    */
+  def namedThreadFactory(prefix: String): ThreadFactory = {
+    new ThreadFactoryBuilder().setDaemon(true).setNameFormat(prefix + "-%d").build()
+  }
+
+  /**
+    * Wrapper over newSingleThreadExecutor.
+    */
   def newDaemonSingleThreadExecutor(threadName: String): ExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
     Executors.newSingleThreadExecutor(threadFactory)
   }
 
   /**
-   * Wrapper over ScheduledThreadPoolExecutor.
-   */
+    * Wrapper over ScheduledThreadPoolExecutor.
+    */
   def newDaemonSingleThreadScheduledExecutor(threadName: String): ScheduledExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
     val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
@@ -103,10 +103,10 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Wrapper over ScheduledThreadPoolExecutor.
-   */
+    * Wrapper over ScheduledThreadPoolExecutor.
+    */
   def newDaemonThreadPoolScheduledExecutor(threadNamePrefix: String, numThreads: Int)
-      : ScheduledExecutorService = {
+  : ScheduledExecutorService = {
     val threadFactory = new ThreadFactoryBuilder()
       .setDaemon(true)
       .setNameFormat(s"$threadNamePrefix-%d")
@@ -119,19 +119,19 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Run a piece of code in a new thread and return the result. Exception in the new thread is
-   * thrown in the caller thread with an adjusted stack trace that removes references to this
-   * method for clarity. The exception stack traces will be like the following
-   *
-   * SomeException: exception-message
-   *   at CallerClass.body-method (sourcefile.scala)
-   *   at ... run in separate thread using org.apache.spark.util.ThreadUtils ... ()
-   *   at CallerClass.caller-method (sourcefile.scala)
-   *   ...
-   */
+    * Run a piece of code in a new thread and return the result. Exception in the new thread is
+    * thrown in the caller thread with an adjusted stack trace that removes references to this
+    * method for clarity. The exception stack traces will be like the following
+    *
+    * SomeException: exception-message
+    * at CallerClass.body-method (sourcefile.scala)
+    * at ... run in separate thread using org.apache.spark.util.ThreadUtils ... ()
+    * at CallerClass.caller-method (sourcefile.scala)
+    * ...
+    */
   def runInNewThread[T](
-      threadName: String,
-      isDaemon: Boolean = true)(body: => T): T = {
+                         threadName: String,
+                         isDaemon: Boolean = true)(body: => T): T = {
     @volatile var exception: Option[Throwable] = None
     @volatile var result: T = null.asInstanceOf[T]
 
@@ -155,11 +155,11 @@ private[spark] object ThreadUtils {
         // This means drop everything from the top until the stack element
         // ThreadUtils.runInNewThread(), and then drop that as well (hence the `drop(1)`).
         val baseStackTrace = Thread.currentThread().getStackTrace().dropWhile(
-          ! _.getClassName.contains(this.getClass.getSimpleName)).drop(1)
+          !_.getClassName.contains(this.getClass.getSimpleName)).drop(1)
 
         // Remove the part of the new thread stack that shows methods call from this helper method
         val extraStackTrace = realException.getStackTrace.takeWhile(
-          ! _.getClassName.contains(this.getClass.getSimpleName))
+          !_.getClassName.contains(this.getClass.getSimpleName))
 
         // Combine the two stack traces, with a place holder just specifying that there
         // was a helper method used, without any further details of the helper
@@ -177,8 +177,8 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Construct a new Scala ForkJoinPool with a specified max parallelism and name prefix.
-   */
+    * Construct a new Scala ForkJoinPool with a specified max parallelism and name prefix.
+    */
   def newForkJoinPool(prefix: String, maxThreadNumber: Int): SForkJoinPool = {
     // Custom factory to set thread names
     val factory = new SForkJoinPool.ForkJoinWorkerThreadFactory {
@@ -195,18 +195,18 @@ private[spark] object ThreadUtils {
 
   // scalastyle:off awaitresult
   /**
-   * Preferred alternative to `Await.result()`.
-   *
-   * This method wraps and re-throws any exceptions thrown by the underlying `Await` call, ensuring
-   * that this thread's stack trace appears in logs.
-   *
-   * In addition, it calls `Awaitable.result` directly to avoid using `ForkJoinPool`'s
-   * `BlockingContext`. Codes running in the user's thread may be in a thread of Scala ForkJoinPool.
-   * As concurrent executions in ForkJoinPool may see some [[ThreadLocal]] value unexpectedly, this
-   * method basically prevents ForkJoinPool from running other tasks in the current waiting thread.
-   * In general, we should use this method because many places in Spark use [[ThreadLocal]] and it's
-   * hard to debug when [[ThreadLocal]]s leak to other tasks.
-   */
+    * Preferred alternative to `Await.result()`.
+    *
+    * This method wraps and re-throws any exceptions thrown by the underlying `Await` call, ensuring
+    * that this thread's stack trace appears in logs.
+    *
+    * In addition, it calls `Awaitable.result` directly to avoid using `ForkJoinPool`'s
+    * `BlockingContext`. Codes running in the user's thread may be in a thread of Scala ForkJoinPool.
+    * As concurrent executions in ForkJoinPool may see some [[ThreadLocal]] value unexpectedly, this
+    * method basically prevents ForkJoinPool from running other tasks in the current waiting thread.
+    * In general, we should use this method because many places in Spark use [[ThreadLocal]] and it's
+    * hard to debug when [[ThreadLocal]]s leak to other tasks.
+    */
   @throws(classOf[SparkException])
   def awaitResult[T](awaitable: Awaitable[T], atMost: Duration): T = {
     try {
@@ -222,14 +222,15 @@ private[spark] object ThreadUtils {
         throw new SparkException("Exception thrown in awaitResult: ", t)
     }
   }
+
   // scalastyle:on awaitresult
 
   // scalastyle:off awaitready
   /**
-   * Preferred alternative to `Await.ready()`.
-   *
-   * @see [[awaitResult]]
-   */
+    * Preferred alternative to `Await.ready()`.
+    *
+    * @see [[awaitResult]]
+    */
   @throws(classOf[SparkException])
   def awaitReady[T](awaitable: Awaitable[T], atMost: Duration): awaitable.type = {
     try {
@@ -243,11 +244,12 @@ private[spark] object ThreadUtils {
         throw new SparkException("Exception thrown in awaitResult: ", t)
     }
   }
+
   // scalastyle:on awaitready
 
   def shutdown(
-      executor: ExecutorService,
-      gracePeriod: Duration = FiniteDuration(30, TimeUnit.SECONDS)): Unit = {
+                executor: ExecutorService,
+                gracePeriod: Duration = FiniteDuration(30, TimeUnit.SECONDS)): Unit = {
     executor.shutdown()
     executor.awaitTermination(gracePeriod.toMillis, TimeUnit.MILLISECONDS)
     if (!executor.isShutdown) {

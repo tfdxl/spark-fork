@@ -20,12 +20,12 @@ package org.apache.spark.scheduler
 import java.io._
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.{AccumulatorV2, Utils}
+
+import scala.collection.mutable.ArrayBuffer
 
 // Task result. Also contains updates to accumulator variables.
 private[spark] sealed trait TaskResult[T]
@@ -36,8 +36,8 @@ private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
 
 /** A TaskResult that contains the task's return value and accumulator updates. */
 private[spark] class DirectTaskResult[T](
-    var valueBytes: ByteBuffer,
-    var accumUpdates: Seq[AccumulatorV2[_, _]])
+                                          var valueBytes: ByteBuffer,
+                                          var accumUpdates: Seq[AccumulatorV2[_, _]])
   extends TaskResult[T] with Externalizable {
 
   private var valueObjectDeserialized = false
@@ -72,12 +72,12 @@ private[spark] class DirectTaskResult[T](
   }
 
   /**
-   * When `value()` is called at the first time, it needs to deserialize `valueObject` from
-   * `valueBytes`. It may cost dozens of seconds for a large instance. So when calling `value` at
-   * the first time, the caller should avoid to block other threads.
-   *
-   * After the first time, `value()` is trivial and just returns the deserialized `valueObject`.
-   */
+    * When `value()` is called at the first time, it needs to deserialize `valueObject` from
+    * `valueBytes`. It may cost dozens of seconds for a large instance. So when calling `value` at
+    * the first time, the caller should avoid to block other threads.
+    *
+    * After the first time, `value()` is trivial and just returns the deserialized `valueObject`.
+    */
   def value(resultSer: SerializerInstance = null): T = {
     if (valueObjectDeserialized) {
       valueObject

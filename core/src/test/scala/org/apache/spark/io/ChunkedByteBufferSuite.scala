@@ -20,11 +20,10 @@ package org.apache.spark.io
 import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
-
-import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.util.io.ChunkedByteBuffer
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 
 class ChunkedByteBufferSuite extends SparkFunSuite with SharedSparkContext {
 

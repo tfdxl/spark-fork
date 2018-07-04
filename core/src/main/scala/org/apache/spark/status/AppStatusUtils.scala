@@ -23,10 +23,6 @@ private[spark] object AppStatusUtils {
 
   private val TASK_FINISHED_STATES = Set("FAILED", "KILLED", "SUCCESS")
 
-  private def isTaskFinished(task: TaskData): Boolean = {
-    TASK_FINISHED_STATES.contains(task.status)
-  }
-
   def schedulerDelay(task: TaskData): Long = {
     if (isTaskFinished(task) && task.taskMetrics.isDefined && task.duration.isDefined) {
       val m = task.taskMetrics.get
@@ -38,19 +34,23 @@ private[spark] object AppStatusUtils {
     }
   }
 
-  def gettingResultTime(task: TaskData): Long = {
-    gettingResultTime(task.launchTime.getTime(), fetchStart(task), task.duration.getOrElse(-1L))
+  private def isTaskFinished(task: TaskData): Boolean = {
+    TASK_FINISHED_STATES.contains(task.status)
   }
 
   def schedulerDelay(
-      launchTime: Long,
-      fetchStart: Long,
-      duration: Long,
-      deserializeTime: Long,
-      serializeTime: Long,
-      runTime: Long): Long = {
+                      launchTime: Long,
+                      fetchStart: Long,
+                      duration: Long,
+                      deserializeTime: Long,
+                      serializeTime: Long,
+                      runTime: Long): Long = {
     math.max(0, duration - runTime - deserializeTime - serializeTime -
       gettingResultTime(launchTime, fetchStart, duration))
+  }
+
+  def gettingResultTime(task: TaskData): Long = {
+    gettingResultTime(task.launchTime.getTime(), fetchStart(task), task.duration.getOrElse(-1L))
   }
 
   def gettingResultTime(launchTime: Long, fetchStart: Long, duration: Long): Long = {

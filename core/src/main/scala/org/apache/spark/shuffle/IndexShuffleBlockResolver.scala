@@ -21,7 +21,6 @@ import java.io._
 import java.nio.channels.Channels
 import java.nio.file.Files
 
-import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -29,39 +28,32 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkEnv}
 
 /**
- * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
- * Data of shuffle blocks from the same map task are stored in a single consolidated data file.
- * The offsets of the data blocks in the data file are stored in a separate index file.
- *
- * We use the name of the shuffle data's shuffleBlockId with reduce ID set to 0 and add ".data"
- * as the filename postfix for data file, and ".index" as the filename postfix for index file.
- *
- */
+  * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
+  * Data of shuffle blocks from the same map task are stored in a single consolidated data file.
+  * The offsets of the data blocks in the data file are stored in a separate index file.
+  *
+  * We use the name of the shuffle data's shuffleBlockId with reduce ID set to 0 and add ".data"
+  * as the filename postfix for data file, and ".index" as the filename postfix for index file.
+  *
+  */
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getSortBasedShuffleBlockData().
 private[spark] class IndexShuffleBlockResolver(
-    conf: SparkConf,
-    _blockManager: BlockManager = null)
+                                                conf: SparkConf,
+                                                _blockManager: BlockManager = null)
   extends ShuffleBlockResolver
-  with Logging {
+    with Logging {
 
   private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-  def getDataFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
-  }
-
-  private def getIndexFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
-  }
-
   /**
-   * Remove data file and index file that contain the output data from one map.
-   */
+    * Remove data file and index file that contain the output data from one map.
+    */
   def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
     var file = getDataFile(shuffleId, mapId)
     if (file.exists()) {
@@ -78,66 +70,29 @@ private[spark] class IndexShuffleBlockResolver(
     }
   }
 
-  /**
-   * Check whether the given index and data files match each other.
-   * If so, return the partition lengths in the data file. Otherwise return null.
-   */
-  private def checkIndexAndDataFile(index: File, data: File, blocks: Int): Array[Long] = {
-    // the index file should have `block + 1` longs as offset.
-    if (index.length() != (blocks + 1) * 8L) {
-      return null
-    }
-    val lengths = new Array[Long](blocks)
-    // Read the lengths of blocks
-    val in = try {
-      new DataInputStream(new NioBufferedFileInputStream(index))
-    } catch {
-      case e: IOException =>
-        return null
-    }
-    try {
-      // Convert the offsets into lengths of each block
-      var offset = in.readLong()
-      if (offset != 0L) {
-        return null
-      }
-      var i = 0
-      while (i < blocks) {
-        val off = in.readLong()
-        lengths(i) = off - offset
-        offset = off
-        i += 1
-      }
-    } catch {
-      case e: IOException =>
-        return null
-    } finally {
-      in.close()
-    }
+  def getDataFile(shuffleId: Int, mapId: Int): File = {
+    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+  }
 
-    // the size of data file should match with index file
-    if (data.length() == lengths.sum) {
-      lengths
-    } else {
-      null
-    }
+  private def getIndexFile(shuffleId: Int, mapId: Int): File = {
+    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
   /**
-   * Write an index file with the offsets of each block, plus a final offset at the end for the
-   * end of the output file. This will be used by getBlockData to figure out where each block
-   * begins and ends.
-   *
-   * It will commit the data and index file as an atomic operation, use the existing ones, or
-   * replace them with new ones.
-   *
-   * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
-   */
+    * Write an index file with the offsets of each block, plus a final offset at the end for the
+    * end of the output file. This will be used by getBlockData to figure out where each block
+    * begins and ends.
+    *
+    * It will commit the data and index file as an atomic operation, use the existing ones, or
+    * replace them with new ones.
+    *
+    * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
+    */
   def writeIndexFileAndCommit(
-      shuffleId: Int,
-      mapId: Int,
-      lengths: Array[Long],
-      dataTmp: File): Unit = {
+                               shuffleId: Int,
+                               mapId: Int,
+                               lengths: Array[Long],
+                               dataTmp: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
     try {
@@ -187,6 +142,51 @@ private[spark] class IndexShuffleBlockResolver(
       if (indexTmp.exists() && !indexTmp.delete()) {
         logError(s"Failed to delete temporary index file at ${indexTmp.getAbsolutePath}")
       }
+    }
+  }
+
+  /**
+    * Check whether the given index and data files match each other.
+    * If so, return the partition lengths in the data file. Otherwise return null.
+    */
+  private def checkIndexAndDataFile(index: File, data: File, blocks: Int): Array[Long] = {
+    // the index file should have `block + 1` longs as offset.
+    if (index.length() != (blocks + 1) * 8L) {
+      return null
+    }
+    val lengths = new Array[Long](blocks)
+    // Read the lengths of blocks
+    val in = try {
+      new DataInputStream(new NioBufferedFileInputStream(index))
+    } catch {
+      case e: IOException =>
+        return null
+    }
+    try {
+      // Convert the offsets into lengths of each block
+      var offset = in.readLong()
+      if (offset != 0L) {
+        return null
+      }
+      var i = 0
+      while (i < blocks) {
+        val off = in.readLong()
+        lengths(i) = off - offset
+        offset = off
+        i += 1
+      }
+    } catch {
+      case e: IOException =>
+        return null
+    } finally {
+      in.close()
+    }
+
+    // the size of data file should match with index file
+    if (data.length() == lengths.sum) {
+      lengths
+    } else {
+      null
     }
   }
 

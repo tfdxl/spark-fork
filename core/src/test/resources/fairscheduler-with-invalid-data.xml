@@ -17,7 +17,7 @@
   -->
 
 <allocations>
-   <pool name="pool_with_invalid_min_share">
+    <pool name="pool_with_invalid_min_share">
         <minShare>INVALID_MIN_SHARE</minShare>
         <weight>2</weight>
         <schedulingMode>FAIR</schedulingMode>
@@ -43,19 +43,19 @@
         <schedulingMode>NONE</schedulingMode>
     </pool>
     <pool name="pool_with_whitespace_min_share">
-        <minShare>  </minShare>
+        <minShare></minShare>
         <weight>2</weight>
         <schedulingMode>FAIR</schedulingMode>
     </pool>
     <pool name="pool_with_whitespace_weight">
         <minShare>1</minShare>
-        <weight>  </weight>
+        <weight></weight>
         <schedulingMode>FAIR</schedulingMode>
     </pool>
     <pool name="pool_with_whitespace_scheduling_mode">
         <minShare>3</minShare>
         <weight>2</weight>
-        <schedulingMode>  </schedulingMode>
+        <schedulingMode></schedulingMode>
     </pool>
     <pool name="pool_with_empty_min_share">
         <minShare></minShare>
@@ -73,8 +73,8 @@
         <schedulingMode></schedulingMode>
     </pool>
     <pool name="pool_with_surrounded_whitespace">
-        <minShare> 3 </minShare>
-        <weight> 2 </weight>
-        <schedulingMode> FAIR </schedulingMode>
+        <minShare>3</minShare>
+        <weight>2</weight>
+        <schedulingMode>FAIR</schedulingMode>
     </pool>
 </allocations>

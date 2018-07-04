@@ -18,9 +18,9 @@
 package org.apache.spark
 
 /**
- * A collection of fields and methods concerned with internal accumulators that represent
- * task level metrics.
- */
+  * A collection of fields and methods concerned with internal accumulators that represent
+  * task level metrics.
+  */
 private[spark] object InternalAccumulator {
   // Prefixes used in names of internal task level metrics
   val METRICS_PREFIX = "internal.metrics."

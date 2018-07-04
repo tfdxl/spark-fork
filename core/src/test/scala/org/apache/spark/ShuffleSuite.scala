@@ -17,19 +17,18 @@
 
 package org.apache.spark
 
+import java.util.concurrent.{Callable, CyclicBarrier, ExecutorService, Executors}
 import java.util.{Locale, Properties}
-import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService}
-
-import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.memory.TaskMemoryManager
-import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
+import org.apache.spark.rdd._
 import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
-import org.apache.spark.util.{MutablePair, Utils}
+import org.apache.spark.util.MutablePair
+import org.scalatest.Matchers
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
@@ -99,7 +98,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // 201 partitions (greater than "spark.shuffle.sort.bypassMergeThreshold") from 4 keys
     val NUM_BLOCKS = 201
     val a = sc.parallelize(1 to 4, NUM_BLOCKS)
-    val b = a.map(x => (x, x*2))
+    val b = a.map(x => (x, x * 2))
 
     // NOTE: The default Java serializer doesn't create zero-sized blocks.
     //       So, use Kryo
@@ -126,7 +125,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // 201 partitions (greater than "spark.shuffle.sort.bypassMergeThreshold") from 4 keys
     val NUM_BLOCKS = 201
     val a = sc.parallelize(1 to 4, NUM_BLOCKS)
-    val b = a.map(x => (x, x*2))
+    val b = a.map(x => (x, x * 2))
 
     // NOTE: The default Java serializer should create zero-sized blocks
     val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(NUM_BLOCKS))
@@ -147,34 +146,40 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
   test("shuffle on mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
+
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
+
     val data = Array(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new ShuffledRDD[Int, Int, Int](pairs,
       new HashPartitioner(2)).collect()
 
-    data.foreach { pair => results should contain ((pair._1, pair._2)) }
+    data.foreach { pair => results should contain((pair._1, pair._2)) }
   }
 
   test("sorting on mutable pairs") {
     // This is not in SortingSuite because of the local cluster setup.
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
+
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
+
     val data = Array(p(1, 11), p(3, 33), p(100, 100), p(2, 22))
     val pairs: RDD[MutablePair[Int, Int]] = sc.parallelize(data, 2)
     val results = new OrderedRDDFunctions[Int, Int, MutablePair[Int, Int]](pairs)
       .sortByKey().collect()
-    results(0) should be ((1, 11))
-    results(1) should be ((2, 22))
-    results(2) should be ((3, 33))
-    results(3) should be ((100, 100))
+    results(0) should be((1, 11))
+    results(1) should be((2, 22))
+    results(2) should be((3, 33))
+    results(3) should be((100, 100))
   }
 
   test("cogroup using mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
+
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
+
     val data1 = Seq(p(1, 1), p(1, 2), p(1, 3), p(2, 1))
     val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"), p(3, "3"))
     val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
@@ -201,7 +206,9 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
   test("subtract mutable pairs") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
+
     def p[T1, T2](_1: T1, _2: T2): MutablePair[T1, T2] = MutablePair(_1, _2)
+
     val data1 = Seq(p(1, 1), p(1, 2), p(1, 3), p(2, 1), p(3, 33))
     val data2 = Seq(p(1, "11"), p(1, "12"), p(2, "22"))
     val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
@@ -209,7 +216,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val results = new SubtractedRDD(pairs1, pairs2, new HashPartitioner(2)).collect()
     results should have length (1)
     // substracted rdd return results as Tuple2
-    results(0) should be ((3, 33))
+    results(0) should be((3, 33))
   }
 
   test("sort with Java non serializable class - Kryo") {
@@ -364,24 +371,25 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // first attempt -- its successful
     val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0,
       new TaskContextImpl(0, 0, 0, 0L, 0, taskMemoryManager, new Properties, metricsSystem))
-    val data1 = (1 to 10).map { x => x -> x}
+    val data1 = (1 to 10).map { x => x -> x }
 
     // second attempt -- also successful.  We'll write out different data,
     // just to simulate the fact that the records may get written differently
     // depending on what gets spilled, what gets combined, etc.
     val writer2 = manager.getWriter[Int, Int](shuffleHandle, 0,
       new TaskContextImpl(0, 0, 0, 1L, 0, taskMemoryManager, new Properties, metricsSystem))
-    val data2 = (11 to 20).map { x => x -> x}
+    val data2 = (11 to 20).map { x => x -> x }
 
     // interleave writes of both attempts -- we want to test that both attempts can occur
     // simultaneously, and everything is still OK
 
     def writeAndClose(
-      writer: ShuffleWriter[Int, Int])(
-      iter: Iterator[(Int, Int)]): Option[MapStatus] = {
+                       writer: ShuffleWriter[Int, Int])(
+                       iter: Iterator[(Int, Int)]): Option[MapStatus] = {
       val files = writer.write(iter)
       writer.stop(true)
     }
+
     val interleaver = new InterleaveIterators(
       data1, writeAndClose(writer1), data2, writeAndClose(writer2))
     val (mapOutput1, mapOutput2) = interleaver.run()
@@ -407,36 +415,26 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 }
 
 /**
- * Utility to help tests make sure that we can process two different iterators simultaneously
- * in different threads.  This makes sure that in your test, you don't completely process data1 with
- * f1 before processing data2 with f2 (or vice versa).  It adds a barrier so that the functions only
- * process one element, before pausing to wait for the other function to "catch up".
- */
+  * Utility to help tests make sure that we can process two different iterators simultaneously
+  * in different threads.  This makes sure that in your test, you don't completely process data1 with
+  * f1 before processing data2 with f2 (or vice versa).  It adds a barrier so that the functions only
+  * process one element, before pausing to wait for the other function to "catch up".
+  */
 class InterleaveIterators[T, R](
-  data1: Seq[T],
-  f1: Iterator[T] => R,
-  data2: Seq[T],
-  f2: Iterator[T] => R) {
+                                 data1: Seq[T],
+                                 f1: Iterator[T] => R,
+                                 data2: Seq[T],
+                                 f2: Iterator[T] => R) {
 
   require(data1.size == data2.size)
 
   val barrier = new CyclicBarrier(2)
-  class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
-    def hasNext: Boolean = sub.hasNext
-
-    def next: E = {
-      barrier.await()
-      sub.next()
-    }
-  }
-
   val c1 = new Callable[R] {
     override def call(): R = f1(new BarrierIterator(1, data1.iterator))
   }
   val c2 = new Callable[R] {
     override def call(): R = f2(new BarrierIterator(2, data2.iterator))
   }
-
   val e: ExecutorService = Executors.newFixedThreadPool(2)
 
   def run(): (R, R) = {
@@ -447,6 +445,15 @@ class InterleaveIterators[T, R](
     e.shutdown()
     (r1, r2)
   }
+
+  class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
+    def hasNext: Boolean = sub.hasNext
+
+    def next: E = {
+      barrier.await()
+      sub.next()
+    }
+  }
 }
 
 object ShuffleSuite {
@@ -454,18 +461,6 @@ object ShuffleSuite {
   def mergeCombineException(x: Int, y: Int): Int = {
     throw new SparkException("Exception for map-side combine.")
   }
-
-  class NonJavaSerializableClass(val value: Int) extends Comparable[NonJavaSerializableClass] {
-    override def compareTo(o: NonJavaSerializableClass): Int = {
-      value - o.value
-    }
-  }
-
-  case class AggregatedShuffleMetrics(
-    recordsWritten: Long,
-    recordsRead: Long,
-    bytesWritten: Long,
-    byresRead: Long)
 
   def runAndReturnMetrics(sc: SparkContext)(job: => Unit): AggregatedShuffleMetrics = {
     @volatile var recordsWritten: Long = 0
@@ -487,4 +482,16 @@ object ShuffleSuite {
     sc.listenerBus.waitUntilEmpty(500)
     AggregatedShuffleMetrics(recordsWritten, recordsRead, bytesWritten, bytesRead)
   }
+
+  class NonJavaSerializableClass(val value: Int) extends Comparable[NonJavaSerializableClass] {
+    override def compareTo(o: NonJavaSerializableClass): Int = {
+      value - o.value
+    }
+  }
+
+  case class AggregatedShuffleMetrics(
+                                       recordsWritten: Long,
+                                       recordsRead: Long,
+                                       bytesWritten: Long,
+                                       byresRead: Long)
 }

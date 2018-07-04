@@ -20,11 +20,7 @@ package org.apache.spark.rdd
 import java.io.{FileNotFoundException, IOException}
 import java.util.concurrent.TimeUnit
 
-import scala.reflect.ClassTag
-import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
@@ -32,41 +28,50 @@ import org.apache.spark.internal.config.CHECKPOINT_COMPRESS
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
+import scala.reflect.ClassTag
+import scala.util.control.NonFatal
+
 /**
- * An RDD that reads from checkpoint files previously written to reliable storage.
- */
+  * An RDD that reads from checkpoint files previously written to reliable storage.
+  */
 private[spark] class ReliableCheckpointRDD[T: ClassTag](
-    sc: SparkContext,
-    val checkpointPath: String,
-    _partitioner: Option[Partitioner] = None
-  ) extends CheckpointRDD[T](sc) {
-
-  @transient private val hadoopConf = sc.hadoopConfiguration
-  @transient private val cpath = new Path(checkpointPath)
-  @transient private val fs = cpath.getFileSystem(hadoopConf)
-  private val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
-
-  // Fail fast if checkpoint directory does not exist
-  require(fs.exists(cpath), s"Checkpoint directory does not exist: $checkpointPath")
+                                                         sc: SparkContext,
+                                                         val checkpointPath: String,
+                                                         _partitioner: Option[Partitioner] = None
+                                                       ) extends CheckpointRDD[T](sc) {
 
   /**
-   * Return the path of the checkpoint directory this RDD reads data from.
-   */
+    * Return the path of the checkpoint directory this RDD reads data from.
+    */
   override val getCheckpointFile: Option[String] = Some(checkpointPath)
-
   override val partitioner: Option[Partitioner] = {
     _partitioner.orElse {
       ReliableCheckpointRDD.readCheckpointedPartitionerFile(context, checkpointPath)
     }
   }
+  @transient private val hadoopConf = sc.hadoopConfiguration
+  @transient private val cpath = new Path(checkpointPath)
+
+  // Fail fast if checkpoint directory does not exist
+  require(fs.exists(cpath), s"Checkpoint directory does not exist: $checkpointPath")
+  @transient private val fs = cpath.getFileSystem(hadoopConf)
+  private val broadcastedConf = sc.broadcast(new SerializableConfiguration(hadoopConf))
 
   /**
-   * Return partitions described by the files in the checkpoint directory.
-   *
-   * Since the original RDD may belong to a prior application, there is no way to know a
-   * priori the number of partitions to expect. This method assumes that the original set of
-   * checkpoint files are fully preserved in a reliable storage across application lifespans.
-   */
+    * Read the content of the checkpoint file associated with the given partition.
+    */
+  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
+    val file = new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index))
+    ReliableCheckpointRDD.readCheckpointFile(file, broadcastedConf, context)
+  }
+
+  /**
+    * Return partitions described by the files in the checkpoint directory.
+    *
+    * Since the original RDD may belong to a prior application, there is no way to know a
+    * priori the number of partitions to expect. This method assumes that the original set of
+    * checkpoint files are fully preserved in a reliable storage across application lifespans.
+    */
   protected override def getPartitions: Array[Partition] = {
     // listStatus can throw exception if path does not exist.
     val inputFiles = fs.listStatus(cpath)
@@ -83,8 +88,8 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   }
 
   /**
-   * Return the locations of the checkpoint file associated with the given partition.
-   */
+    * Return the locations of the checkpoint file associated with the given partition.
+    */
   protected override def getPreferredLocations(split: Partition): Seq[String] = {
     val status = fs.getFileStatus(
       new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index)))
@@ -92,36 +97,17 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     locations.headOption.toList.flatMap(_.getHosts).filter(_ != "localhost")
   }
 
-  /**
-   * Read the content of the checkpoint file associated with the given partition.
-   */
-  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
-    val file = new Path(checkpointPath, ReliableCheckpointRDD.checkpointFileName(split.index))
-    ReliableCheckpointRDD.readCheckpointFile(file, broadcastedConf, context)
-  }
-
 }
 
 private[spark] object ReliableCheckpointRDD extends Logging {
 
   /**
-   * Return the checkpoint file name for the given partition.
-   */
-  private def checkpointFileName(partitionIndex: Int): String = {
-    "part-%05d".format(partitionIndex)
-  }
-
-  private def checkpointPartitionerFileName(): String = {
-    "_partitioner"
-  }
-
-  /**
-   * Write RDD to checkpoint files and return a ReliableCheckpointRDD representing the RDD.
-   */
+    * Write RDD to checkpoint files and return a ReliableCheckpointRDD representing the RDD.
+    */
   def writeRDDToCheckpointDirectory[T: ClassTag](
-      originalRDD: RDD[T],
-      checkpointDir: String,
-      blockSize: Int = -1): ReliableCheckpointRDD[T] = {
+                                                  originalRDD: RDD[T],
+                                                  checkpointDir: String,
+                                                  blockSize: Int = -1): ReliableCheckpointRDD[T] = {
     val checkpointStartTimeNs = System.nanoTime()
 
     val sc = originalRDD.sparkContext
@@ -161,12 +147,12 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   }
 
   /**
-   * Write an RDD partition's data to a checkpoint file.
-   */
+    * Write an RDD partition's data to a checkpoint file.
+    */
   def writePartitionToCheckpointFile[T: ClassTag](
-      path: String,
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) {
+                                                   path: String,
+                                                   broadcastedConf: Broadcast[SerializableConfiguration],
+                                                   blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) {
     val env = SparkEnv.get
     val outputDir = new Path(path)
     val fs = outputDir.getFileSystem(broadcastedConf.value.value)
@@ -215,11 +201,18 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   }
 
   /**
-   * Write a partitioner to the given RDD checkpoint directory. This is done on a best-effort
-   * basis; any exception while writing the partitioner is caught, logged and ignored.
-   */
+    * Return the checkpoint file name for the given partition.
+    */
+  private def checkpointFileName(partitionIndex: Int): String = {
+    "part-%05d".format(partitionIndex)
+  }
+
+  /**
+    * Write a partitioner to the given RDD checkpoint directory. This is done on a best-effort
+    * basis; any exception while writing the partitioner is caught, logged and ignored.
+    */
   private def writePartitionerToCheckpointDir(
-    sc: SparkContext, partitioner: Partitioner, checkpointDirPath: Path): Unit = {
+                                               sc: SparkContext, partitioner: Partitioner, checkpointDirPath: Path): Unit = {
     try {
       val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
       val bufferSize = sc.conf.getInt("spark.buffer.size", 65536)
@@ -239,15 +232,41 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     }
   }
 
+  /**
+    * Read the content of the specified checkpoint file.
+    */
+  def readCheckpointFile[T](
+                             path: Path,
+                             broadcastedConf: Broadcast[SerializableConfiguration],
+                             context: TaskContext): Iterator[T] = {
+    val env = SparkEnv.get
+    val fs = path.getFileSystem(broadcastedConf.value.value)
+    val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
+    val fileInputStream = {
+      val fileStream = fs.open(path, bufferSize)
+      if (env.conf.get(CHECKPOINT_COMPRESS)) {
+        CompressionCodec.createCodec(env.conf).compressedInputStream(fileStream)
+      } else {
+        fileStream
+      }
+    }
+    val serializer = env.serializer.newInstance()
+    val deserializeStream = serializer.deserializeStream(fileInputStream)
+
+    // Register an on-task-completion callback to close the input stream.
+    context.addTaskCompletionListener(context => deserializeStream.close())
+
+    deserializeStream.asIterator.asInstanceOf[Iterator[T]]
+  }
 
   /**
-   * Read a partitioner from the given RDD checkpoint directory, if it exists.
-   * This is done on a best-effort basis; any exception while reading the partitioner is
-   * caught, logged and ignored.
-   */
+    * Read a partitioner from the given RDD checkpoint directory, if it exists.
+    * This is done on a best-effort basis; any exception while reading the partitioner is
+    * caught, logged and ignored.
+    */
   private def readCheckpointedPartitionerFile(
-      sc: SparkContext,
-      checkpointDirPath: String): Option[Partitioner] = {
+                                               sc: SparkContext,
+                                               checkpointDirPath: String): Option[Partitioner] = {
     try {
       val bufferSize = sc.conf.getInt("spark.buffer.size", 65536)
       val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
@@ -273,36 +292,13 @@ private[spark] object ReliableCheckpointRDD extends Logging {
         None
       case NonFatal(e) =>
         logWarning(s"Error reading partitioner from $checkpointDirPath, " +
-            s"partitioner will not be recovered which may lead to performance loss", e)
+          s"partitioner will not be recovered which may lead to performance loss", e)
         None
     }
   }
 
-  /**
-   * Read the content of the specified checkpoint file.
-   */
-  def readCheckpointFile[T](
-      path: Path,
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      context: TaskContext): Iterator[T] = {
-    val env = SparkEnv.get
-    val fs = path.getFileSystem(broadcastedConf.value.value)
-    val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
-    val fileInputStream = {
-      val fileStream = fs.open(path, bufferSize)
-      if (env.conf.get(CHECKPOINT_COMPRESS)) {
-        CompressionCodec.createCodec(env.conf).compressedInputStream(fileStream)
-      } else {
-        fileStream
-      }
-    }
-    val serializer = env.serializer.newInstance()
-    val deserializeStream = serializer.deserializeStream(fileInputStream)
-
-    // Register an on-task-completion callback to close the input stream.
-    context.addTaskCompletionListener(context => deserializeStream.close())
-
-    deserializeStream.asIterator.asInstanceOf[Iterator[T]]
+  private def checkpointPartitionerFileName(): String = {
+    "_partitioner"
   }
 
 }

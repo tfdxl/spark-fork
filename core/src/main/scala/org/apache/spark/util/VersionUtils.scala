@@ -18,28 +18,22 @@
 package org.apache.spark.util
 
 /**
- * Utilities for working with Spark version strings
- */
+  * Utilities for working with Spark version strings
+  */
 private[spark] object VersionUtils {
 
   private val majorMinorRegex = """^(\d+)\.(\d+)(\..*)?$""".r
 
   /**
-   * Given a Spark version string, return the major version number.
-   * E.g., for 2.0.1-SNAPSHOT, return 2.
-   */
+    * Given a Spark version string, return the major version number.
+    * E.g., for 2.0.1-SNAPSHOT, return 2.
+    */
   def majorVersion(sparkVersion: String): Int = majorMinorVersion(sparkVersion)._1
 
   /**
-   * Given a Spark version string, return the minor version number.
-   * E.g., for 2.0.1-SNAPSHOT, return 0.
-   */
-  def minorVersion(sparkVersion: String): Int = majorMinorVersion(sparkVersion)._2
-
-  /**
-   * Given a Spark version string, return the (major version number, minor version number).
-   * E.g., for 2.0.1-SNAPSHOT, return (2, 0).
-   */
+    * Given a Spark version string, return the (major version number, minor version number).
+    * E.g., for 2.0.1-SNAPSHOT, return (2, 0).
+    */
   def majorMinorVersion(sparkVersion: String): (Int, Int) = {
     majorMinorRegex.findFirstMatchIn(sparkVersion) match {
       case Some(m) =>
@@ -49,4 +43,10 @@ private[spark] object VersionUtils {
           s" version string, but it could not find the major and minor version numbers.")
     }
   }
+
+  /**
+    * Given a Spark version string, return the minor version number.
+    * E.g., for 2.0.1-SNAPSHOT, return 0.
+    */
+  def minorVersion(sparkVersion: String): Int = majorMinorVersion(sparkVersion)._2
 }

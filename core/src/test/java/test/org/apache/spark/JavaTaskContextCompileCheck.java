@@ -26,46 +26,46 @@ import org.apache.spark.util.TaskFailureListener;
  */
 public class JavaTaskContextCompileCheck {
 
-  public static void test() {
-    TaskContext tc = TaskContext.get();
+    public static void test() {
+        TaskContext tc = TaskContext.get();
 
-    tc.isCompleted();
-    tc.isInterrupted();
+        tc.isCompleted();
+        tc.isInterrupted();
 
-    tc.addTaskCompletionListener(new JavaTaskCompletionListenerImpl());
-    tc.addTaskFailureListener(new JavaTaskFailureListenerImpl());
+        tc.addTaskCompletionListener(new JavaTaskCompletionListenerImpl());
+        tc.addTaskFailureListener(new JavaTaskFailureListenerImpl());
 
-    tc.attemptNumber();
-    tc.partitionId();
-    tc.stageId();
-    tc.stageAttemptNumber();
-    tc.taskAttemptId();
-  }
-
-  /**
-   * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
-   * TaskContext is Java friendly.
-   */
-  static class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
-    @Override
-    public void onTaskCompletion(TaskContext context) {
-      context.isCompleted();
-      context.isInterrupted();
-      context.stageId();
-      context.stageAttemptNumber();
-      context.partitionId();
-      context.addTaskCompletionListener(this);
+        tc.attemptNumber();
+        tc.partitionId();
+        tc.stageId();
+        tc.stageAttemptNumber();
+        tc.taskAttemptId();
     }
-  }
 
-  /**
-   * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
-   * TaskContext is Java friendly.
-   */
-  static class JavaTaskFailureListenerImpl implements TaskFailureListener {
-    @Override
-    public void onTaskFailure(TaskContext context, Throwable error) {
+    /**
+     * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
+     * TaskContext is Java friendly.
+     */
+    static class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
+        @Override
+        public void onTaskCompletion(TaskContext context) {
+            context.isCompleted();
+            context.isInterrupted();
+            context.stageId();
+            context.stageAttemptNumber();
+            context.partitionId();
+            context.addTaskCompletionListener(this);
+        }
     }
-  }
+
+    /**
+     * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
+     * TaskContext is Java friendly.
+     */
+    static class JavaTaskFailureListenerImpl implements TaskFailureListener {
+        @Override
+        public void onTaskFailure(TaskContext context, Throwable error) {
+        }
+    }
 
 }

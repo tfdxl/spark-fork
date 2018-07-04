@@ -17,143 +17,75 @@
 
 package org.apache.spark.util
 
-import java.{lang => jl}
 import java.io.ObjectInputStream
-import java.util.{ArrayList, Collections}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.util.{ArrayList, Collections}
+import java.{lang => jl}
 
-import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 
 private[spark] case class AccumulatorMetadata(
-    id: Long,
-    name: Option[String],
-    countFailedValues: Boolean) extends Serializable
+                                               id: Long,
+                                               name: Option[String],
+                                               countFailedValues: Boolean) extends Serializable
 
 
 /**
- * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
- * type `OUT`.
- *
- * `OUT` should be a type that can be read atomically (e.g., Int, Long), or thread-safely
- * (e.g., synchronized collections) because it will be read from other threads.
- */
+  * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
+  * type `OUT`.
+  *
+  * `OUT` should be a type that can be read atomically (e.g., Int, Long), or thread-safely
+  * (e.g., synchronized collections) because it will be read from other threads.
+  */
 abstract class AccumulatorV2[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
   private[this] var atDriverSide = true
 
-  private[spark] def register(
-      sc: SparkContext,
-      name: Option[String] = None,
-      countFailedValues: Boolean = false): Unit = {
-    if (this.metadata != null) {
-      throw new IllegalStateException("Cannot register an Accumulator twice.")
-    }
-    this.metadata = AccumulatorMetadata(AccumulatorContext.newId(), name, countFailedValues)
-    AccumulatorContext.register(this)
-    sc.cleaner.foreach(_.registerAccumulatorForCleanup(this))
-  }
-
   /**
-   * Returns true if this accumulator has been registered.
-   *
-   * @note All accumulators must be registered before use, or it will throw exception.
-   */
-  final def isRegistered: Boolean =
-    metadata != null && AccumulatorContext.get(metadata.id).isDefined
-
-  private def assertMetadataNotNull(): Unit = {
-    if (metadata == null) {
-      throw new IllegalStateException("The metadata of this accumulator has not been assigned yet.")
-    }
-  }
-
-  /**
-   * Returns the id of this accumulator, can only be called after registration.
-   */
-  final def id: Long = {
-    assertMetadataNotNull()
-    metadata.id
-  }
-
-  /**
-   * Returns the name of this accumulator, can only be called after registration.
-   */
-  final def name: Option[String] = {
-    assertMetadataNotNull()
-
-    if (atDriverSide) {
-      metadata.name.orElse(AccumulatorContext.get(id).flatMap(_.metadata.name))
-    } else {
-      metadata.name
-    }
-  }
-
-  /**
-   * Whether to accumulate values from failed tasks. This is set to true for system and time
-   * metrics like serialization time or bytes spilled, and false for things with absolute values
-   * like number of input rows.  This should be used for internal metrics only.
-   */
-  private[spark] final def countFailedValues: Boolean = {
-    assertMetadataNotNull()
-    metadata.countFailedValues
-  }
-
-  /**
-   * Creates an [[AccumulableInfo]] representation of this [[AccumulatorV2]] with the provided
-   * values.
-   */
-  private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    val isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
-    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues)
-  }
-
-  final private[spark] def isAtDriverSide: Boolean = atDriverSide
-
-  /**
-   * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
-   * value; for a list accumulator, Nil is zero value.
-   */
+    * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
+    * value; for a list accumulator, Nil is zero value.
+    */
   def isZero: Boolean
 
   /**
-   * Creates a new copy of this accumulator, which is zero value. i.e. call `isZero` on the copy
-   * must return true.
-   */
-  def copyAndReset(): AccumulatorV2[IN, OUT] = {
-    val copyAcc = copy()
-    copyAcc.reset()
-    copyAcc
-  }
-
-  /**
-   * Creates a new copy of this accumulator.
-   */
+    * Creates a new copy of this accumulator.
+    */
   def copy(): AccumulatorV2[IN, OUT]
 
   /**
-   * Resets this accumulator, which is zero value. i.e. call `isZero` must
-   * return true.
-   */
+    * Resets this accumulator, which is zero value. i.e. call `isZero` must
+    * return true.
+    */
   def reset(): Unit
 
   /**
-   * Takes the inputs and accumulates.
-   */
+    * Takes the inputs and accumulates.
+    */
   def add(v: IN): Unit
 
   /**
-   * Merges another same-type accumulator into this one and update its state, i.e. this should be
-   * merge-in-place.
-   */
+    * Merges another same-type accumulator into this one and update its state, i.e. this should be
+    * merge-in-place.
+    */
   def merge(other: AccumulatorV2[IN, OUT]): Unit
 
   /**
-   * Defines the current value of this accumulator
-   */
+    * Defines the current value of this accumulator
+    */
   def value: OUT
+
+  override def toString: String = {
+    // getClass.getSimpleName can cause Malformed class name error,
+    // call safer `Utils.getSimpleName` instead
+    if (metadata == null) {
+      "Un-registered Accumulator: " + Utils.getSimpleName(getClass)
+    } else {
+      Utils.getSimpleName(getClass) + s"(id: $id, name: $name, value: $value)"
+    }
+  }
 
   // Called by Java when serializing an object
   final protected def writeReplace(): Any = {
@@ -181,6 +113,84 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
     }
   }
 
+  /**
+    * Returns true if this accumulator has been registered.
+    *
+    * @note All accumulators must be registered before use, or it will throw exception.
+    */
+  final def isRegistered: Boolean =
+    metadata != null && AccumulatorContext.get(metadata.id).isDefined
+
+  /**
+    * Returns the name of this accumulator, can only be called after registration.
+    */
+  final def name: Option[String] = {
+    assertMetadataNotNull()
+
+    if (atDriverSide) {
+      metadata.name.orElse(AccumulatorContext.get(id).flatMap(_.metadata.name))
+    } else {
+      metadata.name
+    }
+  }
+
+  private def assertMetadataNotNull(): Unit = {
+    if (metadata == null) {
+      throw new IllegalStateException("The metadata of this accumulator has not been assigned yet.")
+    }
+  }
+
+  /**
+    * Returns the id of this accumulator, can only be called after registration.
+    */
+  final def id: Long = {
+    assertMetadataNotNull()
+    metadata.id
+  }
+
+  /**
+    * Creates a new copy of this accumulator, which is zero value. i.e. call `isZero` on the copy
+    * must return true.
+    */
+  def copyAndReset(): AccumulatorV2[IN, OUT] = {
+    val copyAcc = copy()
+    copyAcc.reset()
+    copyAcc
+  }
+
+  private[spark] def register(
+                               sc: SparkContext,
+                               name: Option[String] = None,
+                               countFailedValues: Boolean = false): Unit = {
+    if (this.metadata != null) {
+      throw new IllegalStateException("Cannot register an Accumulator twice.")
+    }
+    this.metadata = AccumulatorMetadata(AccumulatorContext.newId(), name, countFailedValues)
+    AccumulatorContext.register(this)
+    sc.cleaner.foreach(_.registerAccumulatorForCleanup(this))
+  }
+
+  /**
+    * Creates an [[AccumulableInfo]] representation of this [[AccumulatorV2]] with the provided
+    * values.
+    */
+  private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
+    val isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
+    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues)
+  }
+
+  /**
+    * Whether to accumulate values from failed tasks. This is set to true for system and time
+    * metrics like serialization time or bytes spilled, and false for things with absolute values
+    * like number of input rows.  This should be used for internal metrics only.
+    */
+  private[spark] final def countFailedValues: Boolean = {
+    assertMetadataNotNull()
+    metadata.countFailedValues
+  }
+
+  final private[spark] def isAtDriverSide: Boolean = atDriverSide
+
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
@@ -198,68 +208,60 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
       atDriverSide = true
     }
   }
-
-  override def toString: String = {
-    // getClass.getSimpleName can cause Malformed class name error,
-    // call safer `Utils.getSimpleName` instead
-    if (metadata == null) {
-      "Un-registered Accumulator: " + Utils.getSimpleName(getClass)
-    } else {
-      Utils.getSimpleName(getClass) + s"(id: $id, name: $name, value: $value)"
-    }
-  }
 }
 
 
 /**
- * An internal class used to track accumulators by Spark itself.
- */
+  * An internal class used to track accumulators by Spark itself.
+  */
 private[spark] object AccumulatorContext extends Logging {
 
   /**
-   * This global map holds the original accumulator objects that are created on the driver.
-   * It keeps weak references to these objects so that accumulators can be garbage-collected
-   * once the RDDs and user-code that reference them are cleaned up.
-   * TODO: Don't use a global map; these should be tied to a SparkContext (SPARK-13051).
-   */
+    * This global map holds the original accumulator objects that are created on the driver.
+    * It keeps weak references to these objects so that accumulators can be garbage-collected
+    * once the RDDs and user-code that reference them are cleaned up.
+    * TODO: Don't use a global map; these should be tied to a SparkContext (SPARK-13051).
+    */
   private val originals = new ConcurrentHashMap[Long, jl.ref.WeakReference[AccumulatorV2[_, _]]]
 
   private[this] val nextId = new AtomicLong(0L)
+  // Identifier for distinguishing SQL metrics from other accumulators
+  private[spark] val SQL_ACCUM_IDENTIFIER = "sql"
 
   /**
-   * Returns a globally unique ID for a new [[AccumulatorV2]].
-   * Note: Once you copy the [[AccumulatorV2]] the ID is no longer unique.
-   */
+    * Returns a globally unique ID for a new [[AccumulatorV2]].
+    * Note: Once you copy the [[AccumulatorV2]] the ID is no longer unique.
+    */
   def newId(): Long = nextId.getAndIncrement
 
   /** Returns the number of accumulators registered. Used in testing. */
   def numAccums: Int = originals.size
 
   /**
-   * Registers an [[AccumulatorV2]] created on the driver such that it can be used on the executors.
-   *
-   * All accumulators registered here can later be used as a container for accumulating partial
-   * values across multiple tasks. This is what `org.apache.spark.scheduler.DAGScheduler` does.
-   * Note: if an accumulator is registered here, it should also be registered with the active
-   * context cleaner for cleanup so as to avoid memory leaks.
-   *
-   * If an [[AccumulatorV2]] with the same ID was already registered, this does nothing instead
-   * of overwriting it. We will never register same accumulator twice, this is just a sanity check.
-   */
+    * Registers an [[AccumulatorV2]] created on the driver such that it can be used on the executors.
+    *
+    * All accumulators registered here can later be used as a container for accumulating partial
+    * values across multiple tasks. This is what `org.apache.spark.scheduler.DAGScheduler` does.
+    * Note: if an accumulator is registered here, it should also be registered with the active
+    * context cleaner for cleanup so as to avoid memory leaks.
+    *
+    * If an [[AccumulatorV2]] with the same ID was already registered, this does nothing instead
+    * of overwriting it. We will never register same accumulator twice, this is just a sanity check.
+    */
   def register(a: AccumulatorV2[_, _]): Unit = {
     originals.putIfAbsent(a.id, new jl.ref.WeakReference[AccumulatorV2[_, _]](a))
   }
 
   /**
-   * Unregisters the [[AccumulatorV2]] with the given ID, if any.
-   */
+    * Unregisters the [[AccumulatorV2]] with the given ID, if any.
+    */
   def remove(id: Long): Unit = {
     originals.remove(id)
   }
 
   /**
-   * Returns the [[AccumulatorV2]] registered with the given ID, if any.
-   */
+    * Returns the [[AccumulatorV2]] registered with the given ID, if any.
+    */
   def get(id: Long): Option[AccumulatorV2[_, _]] = {
     val ref = originals.get(id)
     if (ref eq null) {
@@ -275,31 +277,28 @@ private[spark] object AccumulatorContext extends Logging {
   }
 
   /**
-   * Clears all registered [[AccumulatorV2]]s. For testing only.
-   */
+    * Clears all registered [[AccumulatorV2]]s. For testing only.
+    */
   def clear(): Unit = {
     originals.clear()
   }
-
-  // Identifier for distinguishing SQL metrics from other accumulators
-  private[spark] val SQL_ACCUM_IDENTIFIER = "sql"
 }
 
 
 /**
- * An [[AccumulatorV2 accumulator]] for computing sum, count, and average of 64-bit integers.
- *
- * @since 2.0.0
- */
+  * An [[AccumulatorV2 accumulator]] for computing sum, count, and average of 64-bit integers.
+  *
+  * @since 2.0.0
+  */
 class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   private var _sum = 0L
   private var _count = 0L
 
   /**
-   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
-   *
-   * @since 2.0.0
-   */
+    * Returns false if this accumulator has had any values added to it or the sum is non-zero.
+    *
+    * @since 2.0.0
+    */
   override def isZero: Boolean = _sum == 0L && _count == 0
 
   override def copy(): LongAccumulator = {
@@ -315,39 +314,30 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   }
 
   /**
-   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
-   * @since 2.0.0
-   */
+    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+    *
+    * @since 2.0.0
+    */
   override def add(v: jl.Long): Unit = {
     _sum += v
     _count += 1
   }
 
   /**
-   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
-   * @since 2.0.0
-   */
+    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+    *
+    * @since 2.0.0
+    */
   def add(v: Long): Unit = {
     _sum += v
     _count += 1
   }
 
   /**
-   * Returns the number of elements added to the accumulator.
-   * @since 2.0.0
-   */
-  def count: Long = _count
-
-  /**
-   * Returns the sum of elements added to the accumulator.
-   * @since 2.0.0
-   */
-  def sum: Long = _sum
-
-  /**
-   * Returns the average of elements added to the accumulator.
-   * @since 2.0.0
-   */
+    * Returns the average of elements added to the accumulator.
+    *
+    * @since 2.0.0
+    */
   def avg: Double = _sum.toDouble / _count
 
   override def merge(other: AccumulatorV2[jl.Long, jl.Long]): Unit = other match {
@@ -359,25 +349,39 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  private[spark] def setValue(newValue: Long): Unit = _sum = newValue
+  /**
+    * Returns the number of elements added to the accumulator.
+    *
+    * @since 2.0.0
+    */
+  def count: Long = _count
+
+  /**
+    * Returns the sum of elements added to the accumulator.
+    *
+    * @since 2.0.0
+    */
+  def sum: Long = _sum
 
   override def value: jl.Long = _sum
+
+  private[spark] def setValue(newValue: Long): Unit = _sum = newValue
 }
 
 
 /**
- * An [[AccumulatorV2 accumulator]] for computing sum, count, and averages for double precision
- * floating numbers.
- *
- * @since 2.0.0
- */
+  * An [[AccumulatorV2 accumulator]] for computing sum, count, and averages for double precision
+  * floating numbers.
+  *
+  * @since 2.0.0
+  */
 class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private var _sum = 0.0
   private var _count = 0L
 
   /**
-   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
-   */
+    * Returns false if this accumulator has had any values added to it or the sum is non-zero.
+    */
   override def isZero: Boolean = _sum == 0.0 && _count == 0
 
   override def copy(): DoubleAccumulator = {
@@ -393,39 +397,30 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   }
 
   /**
-   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
-   * @since 2.0.0
-   */
+    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+    *
+    * @since 2.0.0
+    */
   override def add(v: jl.Double): Unit = {
     _sum += v
     _count += 1
   }
 
   /**
-   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
-   * @since 2.0.0
-   */
+    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+    *
+    * @since 2.0.0
+    */
   def add(v: Double): Unit = {
     _sum += v
     _count += 1
   }
 
   /**
-   * Returns the number of elements added to the accumulator.
-   * @since 2.0.0
-   */
-  def count: Long = _count
-
-  /**
-   * Returns the sum of elements added to the accumulator.
-   * @since 2.0.0
-   */
-  def sum: Double = _sum
-
-  /**
-   * Returns the average of elements added to the accumulator.
-   * @since 2.0.0
-   */
+    * Returns the average of elements added to the accumulator.
+    *
+    * @since 2.0.0
+    */
   def avg: Double = _sum / _count
 
   override def merge(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
@@ -437,23 +432,37 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
         s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  private[spark] def setValue(newValue: Double): Unit = _sum = newValue
+  /**
+    * Returns the number of elements added to the accumulator.
+    *
+    * @since 2.0.0
+    */
+  def count: Long = _count
+
+  /**
+    * Returns the sum of elements added to the accumulator.
+    *
+    * @since 2.0.0
+    */
+  def sum: Double = _sum
 
   override def value: jl.Double = _sum
+
+  private[spark] def setValue(newValue: Double): Unit = _sum = newValue
 }
 
 
 /**
- * An [[AccumulatorV2 accumulator]] for collecting a list of elements.
- *
- * @since 2.0.0
- */
+  * An [[AccumulatorV2 accumulator]] for collecting a list of elements.
+  *
+  * @since 2.0.0
+  */
 class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   private val _list: java.util.List[T] = Collections.synchronizedList(new ArrayList[T]())
 
   /**
-   * Returns false if this accumulator instance has any values in it.
-   */
+    * Returns false if this accumulator instance has any values in it.
+    */
   override def isZero: Boolean = _list.isEmpty
 
   override def copyAndReset(): CollectionAccumulator[T] = new CollectionAccumulator
@@ -488,11 +497,10 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
 
 
 class LegacyAccumulatorWrapper[R, T](
-    initialValue: R,
-    param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
-  private[spark] var _value = initialValue  // Current value on driver
-
+                                      initialValue: R,
+                                      param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
   @transient private lazy val _zero = param.zero(initialValue)
+  private[spark] var _value = initialValue // Current value on driver
 
   override def isZero: Boolean = _value.asInstanceOf[AnyRef].eq(_zero.asInstanceOf[AnyRef])
 

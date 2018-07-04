@@ -17,31 +17,30 @@
 
 package org.apache.spark.deploy
 
-import scala.collection.mutable.HashSet
-import scala.concurrent.ExecutionContext
-import scala.reflect.ClassTag
-import scala.util.{Failure, Success}
-
 import org.apache.log4j.Logger
-
-import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.util.{SparkExitCode, ThreadUtils, Utils}
+import org.apache.spark.{SecurityManager, SparkConf}
+
+import scala.collection.mutable.HashSet
+import scala.concurrent.ExecutionContext
+import scala.reflect.ClassTag
+import scala.util.{Failure, Success}
 
 /**
- * Proxy that relays messages to the driver.
- *
- * We currently don't support retry if submission fails. In HA mode, client will submit request to
- * all masters and see which one could handle it.
- */
+  * Proxy that relays messages to the driver.
+  *
+  * We currently don't support retry if submission fails. In HA mode, client will submit request to
+  * all masters and see which one could handle it.
+  */
 private class ClientEndpoint(
-    override val rpcEnv: RpcEnv,
-    driverArgs: ClientArguments,
-    masterEndpoints: Seq[RpcEndpointRef],
-    conf: SparkConf)
+                              override val rpcEnv: RpcEnv,
+                              driverArgs: ClientArguments,
+                              masterEndpoints: Seq[RpcEndpointRef],
+                              conf: SparkConf)
   extends ThreadSafeRpcEndpoint with Logging {
 
   // A scheduled executor used to send messages at the specified time.
@@ -57,8 +56,8 @@ private class ClientEndpoint(
           System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
       })
 
-   private val lostMasters = new HashSet[RpcAddress]
-   private var activeMasterEndpoint: RpcEndpointRef = null
+  private val lostMasters = new HashSet[RpcAddress]
+  private var activeMasterEndpoint: RpcEndpointRef = null
 
   override def onStart(): Unit = {
     driverArgs.cmd match {
@@ -103,8 +102,8 @@ private class ClientEndpoint(
   }
 
   /**
-   * Send the message to master and forward the reply to self asynchronously.
-   */
+    * Send the message to master and forward the reply to self asynchronously.
+    */
   private def asyncSendToMasterAndForwardReply[T: ClassTag](message: Any): Unit = {
     for (masterEndpoint <- masterEndpoints) {
       masterEndpoint.ask[T](message).onComplete {
@@ -113,6 +112,28 @@ private class ClientEndpoint(
           logWarning(s"Error sending messages to master $masterEndpoint", e)
       }(forwardMessageExecutionContext)
     }
+  }
+
+  override def receive: PartialFunction[Any, Unit] = {
+
+    case SubmitDriverResponse(master, success, driverId, message) =>
+      logInfo(message)
+      if (success) {
+        activeMasterEndpoint = master
+        pollAndReportStatus(driverId.get)
+      } else if (!Utils.responseFromBackup(message)) {
+        System.exit(-1)
+      }
+
+
+    case KillDriverResponse(master, driverId, success, message) =>
+      logInfo(message)
+      if (success) {
+        activeMasterEndpoint = master
+        pollAndReportStatus(driverId)
+      } else if (!Utils.responseFromBackup(message)) {
+        System.exit(-1)
+      }
   }
 
   /* Find out driver status then exit the JVM */
@@ -145,28 +166,6 @@ private class ClientEndpoint(
       logError(s"ERROR: Cluster master did not recognize $driverId")
       System.exit(-1)
     }
-  }
-
-  override def receive: PartialFunction[Any, Unit] = {
-
-    case SubmitDriverResponse(master, success, driverId, message) =>
-      logInfo(message)
-      if (success) {
-        activeMasterEndpoint = master
-        pollAndReportStatus(driverId.get)
-      } else if (!Utils.responseFromBackup(message)) {
-        System.exit(-1)
-      }
-
-
-    case KillDriverResponse(master, driverId, success, message) =>
-      logInfo(message)
-      if (success) {
-        activeMasterEndpoint = master
-        pollAndReportStatus(driverId)
-      } else if (!Utils.responseFromBackup(message)) {
-        System.exit(-1)
-      }
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -207,8 +206,8 @@ private class ClientEndpoint(
 }
 
 /**
- * Executable utility for starting and terminating drivers inside of a standalone cluster.
- */
+  * Executable utility for starting and terminating drivers inside of a standalone cluster.
+  */
 object Client {
   def main(args: Array[String]) {
     // scalastyle:off println

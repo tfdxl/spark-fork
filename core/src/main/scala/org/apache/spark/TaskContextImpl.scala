@@ -18,10 +18,8 @@
 package org.apache.spark
 
 import java.util.Properties
+
 import javax.annotation.concurrent.GuardedBy
-
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
@@ -30,29 +28,31 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
- * A [[TaskContext]] implementation.
- *
- * A small note on thread safety. The interrupted & fetchFailed fields are volatile, this makes
- * sure that updates are always visible across threads. The complete & failed flags and their
- * callbacks are protected by locking on the context instance. For instance, this ensures
- * that you cannot add a completion listener in one thread while we are completing (and calling
- * the completion listeners) in another thread. Other state is immutable, however the exposed
- * `TaskMetrics` & `MetricsSystem` objects are not thread safe.
- */
+  * A [[TaskContext]] implementation.
+  *
+  * A small note on thread safety. The interrupted & fetchFailed fields are volatile, this makes
+  * sure that updates are always visible across threads. The complete & failed flags and their
+  * callbacks are protected by locking on the context instance. For instance, this ensures
+  * that you cannot add a completion listener in one thread while we are completing (and calling
+  * the completion listeners) in another thread. Other state is immutable, however the exposed
+  * `TaskMetrics` & `MetricsSystem` objects are not thread safe.
+  */
 private[spark] class TaskContextImpl(
-    override val stageId: Int,
-    override val stageAttemptNumber: Int,
-    override val partitionId: Int,
-    override val taskAttemptId: Long,
-    override val attemptNumber: Int,
-    override val taskMemoryManager: TaskMemoryManager,
-    localProperties: Properties,
-    @transient private val metricsSystem: MetricsSystem,
-    // The default value is only used in tests.
-    override val taskMetrics: TaskMetrics = TaskMetrics.empty)
+                                      override val stageId: Int,
+                                      override val stageAttemptNumber: Int,
+                                      override val partitionId: Int,
+                                      override val taskAttemptId: Long,
+                                      override val attemptNumber: Int,
+                                      override val taskMemoryManager: TaskMemoryManager,
+                                      localProperties: Properties,
+                                      @transient private val metricsSystem: MetricsSystem,
+                                      // The default value is only used in tests.
+                                      override val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
-  with Logging {
+    with Logging {
 
   /** List of callback functions to execute when the task completes. */
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -78,7 +78,7 @@ private[spark] class TaskContextImpl(
 
   @GuardedBy("this")
   override def addTaskCompletionListener(listener: TaskCompletionListener)
-      : this.type = synchronized {
+  : this.type = synchronized {
     if (completed) {
       listener.onTaskCompletion(this)
     } else {
@@ -89,7 +89,7 @@ private[spark] class TaskContextImpl(
 
   @GuardedBy("this")
   override def addTaskFailureListener(listener: TaskFailureListener)
-      : this.type = synchronized {
+  : this.type = synchronized {
     if (failed) {
       listener.onTaskFailure(this, failure)
     } else {
@@ -97,6 +97,18 @@ private[spark] class TaskContextImpl(
     }
     this
   }
+
+  @GuardedBy("this")
+  override def isCompleted(): Boolean = synchronized(completed)
+
+  override def isRunningLocally(): Boolean = false
+
+  override def isInterrupted(): Boolean = reasonIfKilled.isDefined
+
+  override def getLocalProperty(key: String): String = localProperties.getProperty(key)
+
+  override def getMetricsSources(sourceName: String): Seq[Source] =
+    metricsSystem.getSourcesByName(sourceName)
 
   /** Marks the task as failed and triggers the failure listeners. */
   @GuardedBy("this")
@@ -109,21 +121,11 @@ private[spark] class TaskContextImpl(
     }
   }
 
-  /** Marks the task as completed and triggers the completion listeners. */
-  @GuardedBy("this")
-  private[spark] def markTaskCompleted(error: Option[Throwable]): Unit = synchronized {
-    if (completed) return
-    completed = true
-    invokeListeners(onCompleteCallbacks, "TaskCompletionListener", error) {
-      _.onTaskCompletion(this)
-    }
-  }
-
   private def invokeListeners[T](
-      listeners: Seq[T],
-      name: String,
-      error: Option[Throwable])(
-      callback: T => Unit): Unit = {
+                                  listeners: Seq[T],
+                                  name: String,
+                                  error: Option[Throwable])(
+                                  callback: T => Unit): Unit = {
     val errorMsgs = new ArrayBuffer[String](2)
     // Process callbacks in the reverse order of registration
     listeners.reverse.foreach { listener =>
@@ -137,6 +139,16 @@ private[spark] class TaskContextImpl(
     }
     if (errorMsgs.nonEmpty) {
       throw new TaskCompletionListenerException(errorMsgs, error)
+    }
+  }
+
+  /** Marks the task as completed and triggers the completion listeners. */
+  @GuardedBy("this")
+  private[spark] def markTaskCompleted(error: Option[Throwable]): Unit = synchronized {
+    if (completed) return
+    completed = true
+    invokeListeners(onCompleteCallbacks, "TaskCompletionListener", error) {
+      _.onTaskCompletion(this)
     }
   }
 
@@ -155,18 +167,6 @@ private[spark] class TaskContextImpl(
   private[spark] override def getKillReason(): Option[String] = {
     reasonIfKilled
   }
-
-  @GuardedBy("this")
-  override def isCompleted(): Boolean = synchronized(completed)
-
-  override def isRunningLocally(): Boolean = false
-
-  override def isInterrupted(): Boolean = reasonIfKilled.isDefined
-
-  override def getLocalProperty(key: String): String = localProperties.getProperty(key)
-
-  override def getMetricsSources(sourceName: String): Seq[Source] =
-    metricsSystem.getSourcesByName(sourceName)
 
   private[spark] override def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
     taskMetrics.registerAccumulator(a)

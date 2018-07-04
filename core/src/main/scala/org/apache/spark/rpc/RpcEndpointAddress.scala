@@ -20,28 +20,28 @@ package org.apache.spark.rpc
 import org.apache.spark.SparkException
 
 /**
- * An address identifier for an RPC endpoint.
- *
- * The `rpcAddress` may be null, in which case the endpoint is registered via a client-only
- * connection and can only be reached via the client that sent the endpoint reference.
- *
- * @param rpcAddress The socket address of the endpoint. It's `null` when this address pointing to
- *                   an endpoint in a client `NettyRpcEnv`.
- * @param name Name of the endpoint.
- */
+  * An address identifier for an RPC endpoint.
+  *
+  * The `rpcAddress` may be null, in which case the endpoint is registered via a client-only
+  * connection and can only be reached via the client that sent the endpoint reference.
+  *
+  * @param rpcAddress The socket address of the endpoint. It's `null` when this address pointing to
+  *                   an endpoint in a client `NettyRpcEnv`.
+  * @param name       Name of the endpoint.
+  */
 private[spark] case class RpcEndpointAddress(rpcAddress: RpcAddress, name: String) {
 
   require(name != null, "RpcEndpoint name must be provided.")
 
+  override val toString = if (rpcAddress != null) {
+    s"spark://$name@${rpcAddress.host}:${rpcAddress.port}"
+  } else {
+    s"spark-client://$name"
+  }
+
   def this(host: String, port: Int, name: String) = {
     this(RpcAddress(host, port), name)
   }
-
-  override val toString = if (rpcAddress != null) {
-      s"spark://$name@${rpcAddress.host}:${rpcAddress.port}"
-    } else {
-      s"spark-client://$name"
-    }
 }
 
 private[spark] object RpcEndpointAddress {
@@ -57,12 +57,12 @@ private[spark] object RpcEndpointAddress {
       val port = uri.getPort
       val name = uri.getUserInfo
       if (uri.getScheme != "spark" ||
-          host == null ||
-          port < 0 ||
-          name == null ||
-          (uri.getPath != null && !uri.getPath.isEmpty) || // uri.getPath returns "" instead of null
-          uri.getFragment != null ||
-          uri.getQuery != null) {
+        host == null ||
+        port < 0 ||
+        name == null ||
+        (uri.getPath != null && !uri.getPath.isEmpty) || // uri.getPath returns "" instead of null
+        uri.getFragment != null ||
+        uri.getQuery != null) {
         throw new SparkException("Invalid Spark URL: " + sparkUrl)
       }
       new RpcEndpointAddress(host, port, name)

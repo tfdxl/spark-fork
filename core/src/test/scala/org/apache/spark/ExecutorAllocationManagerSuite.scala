@@ -17,27 +17,25 @@
 
 package org.apache.spark
 
-import scala.collection.mutable
-
-import org.mockito.Matchers.{any, eq => meq}
-import org.mockito.Mockito.{mock, never, verify, when}
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
-
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.ExternalClusterManager
+import org.apache.spark.scheduler.{ExternalClusterManager, _}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage.BlockManagerMaster
 import org.apache.spark.util.ManualClock
+import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.Mockito.{mock, never, verify, when}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+
+import scala.collection.mutable
 
 /**
- * Test add and remove behavior of ExecutorAllocationManager.
- */
+  * Test add and remove behavior of ExecutorAllocationManager.
+  */
 class ExecutorAllocationManagerSuite
   extends SparkFunSuite
-  with LocalSparkContext
-  with BeforeAndAfter {
+    with LocalSparkContext
+    with BeforeAndAfter {
 
   import ExecutorAllocationManager._
   import ExecutorAllocationManagerSuite._
@@ -52,9 +50,25 @@ class ExecutorAllocationManagerSuite
     contexts.foreach(_.stop())
   }
 
-  private def post(bus: LiveListenerBus, event: SparkListenerEvent): Unit = {
-    bus.post(event)
-    bus.waitUntilEmpty(1000)
+  def testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
+    val conf = new SparkConf()
+      .setMaster("myDummyLocalExternalClusterManager")
+      .setAppName("test-executor-allocation-manager")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+      .set("spark.dynamicAllocation.maxExecutors", "15")
+      .set("spark.dynamicAllocation.minExecutors", "3")
+      .set("spark.dynamicAllocation.executorAllocationRatio", divisor.toString)
+      .set("spark.executor.cores", cores.toString)
+    val sc = new SparkContext(conf)
+    contexts += sc
+    var manager = sc.executorAllocationManager.get
+    post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(0, 20)))
+    for (i <- 0 to 5) {
+      addExecutors(manager)
+    }
+    assert(numExecutorsTarget(manager) === expected)
+    sc.stop()
   }
 
   test("verify min/max executors") {
@@ -70,14 +84,20 @@ class ExecutorAllocationManagerSuite
 
     // Min < 0
     val conf1 = conf.clone().set("spark.dynamicAllocation.minExecutors", "-1")
-    intercept[SparkException] { contexts += new SparkContext(conf1) }
+    intercept[SparkException] {
+      contexts += new SparkContext(conf1)
+    }
 
     // Max < 0
     val conf2 = conf.clone().set("spark.dynamicAllocation.maxExecutors", "-1")
-    intercept[SparkException] { contexts += new SparkContext(conf2) }
+    intercept[SparkException] {
+      contexts += new SparkContext(conf2)
+    }
 
     // Both min and max, but min > max
-    intercept[SparkException] { createSparkContext(2, 1) }
+    intercept[SparkException] {
+      createSparkContext(2, 1)
+    }
 
     // Both min and max, and min == max
     val sc1 = createSparkContext(1, 1)
@@ -145,36 +165,20 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsToAdd(manager) === 1)
   }
 
-  def testAllocationRatio(cores: Int, divisor: Double, expected: Int): Unit = {
-    val conf = new SparkConf()
-      .setMaster("myDummyLocalExternalClusterManager")
-      .setAppName("test-executor-allocation-manager")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
-      .set("spark.dynamicAllocation.maxExecutors", "15")
-      .set("spark.dynamicAllocation.minExecutors", "3")
-      .set("spark.dynamicAllocation.executorAllocationRatio", divisor.toString)
-      .set("spark.executor.cores", cores.toString)
-    val sc = new SparkContext(conf)
-    contexts += sc
-    var manager = sc.executorAllocationManager.get
-    post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(0, 20)))
-    for (i <- 0 to 5) {
-      addExecutors(manager)
-    }
-    assert(numExecutorsTarget(manager) === expected)
-    sc.stop()
+  private def post(bus: LiveListenerBus, event: SparkListenerEvent): Unit = {
+    bus.post(event)
+    bus.waitUntilEmpty(1000)
   }
 
   test("executionAllocationRatio is correctly handled") {
     testAllocationRatio(1, 0.5, 10)
-    testAllocationRatio(1, 1.0/3.0, 7)
-    testAllocationRatio(2, 1.0/3.0, 4)
+    testAllocationRatio(1, 1.0 / 3.0, 7)
+    testAllocationRatio(2, 1.0 / 3.0, 4)
     testAllocationRatio(1, 0.385, 8)
 
     // max/min executors capping
     testAllocationRatio(1, 1.0, 15) // should be 20 but capped by max
-    testAllocationRatio(4, 1.0/3.0, 3)  // should be 2 but elevated by min
+    testAllocationRatio(4, 1.0 / 3.0, 3) // should be 2 but elevated by min
   }
 
 
@@ -410,7 +414,7 @@ class ExecutorAllocationManagerSuite
     assert(executorsPendingToRemove(manager).isEmpty)
   }
 
-  test ("Removing with various numExecutorsTarget condition") {
+  test("Removing with various numExecutorsTarget condition") {
     sc = createSparkContext(5, 12, 5)
     val manager = sc.executorAllocationManager.get
 
@@ -420,7 +424,8 @@ class ExecutorAllocationManagerSuite
     assert(addExecutors(manager) === 1)
     assert(addExecutors(manager) === 2)
     (1 to 8).map { i => createTaskInfo(i, i, s"$i") }.foreach {
-      info => post(sc.listenerBus, SparkListenerTaskStart(0, 0, info)) }
+      info => post(sc.listenerBus, SparkListenerTaskStart(0, 0, info))
+    }
     assert(executorIds(manager).size === 8)
     assert(numExecutorsTarget(manager) === 8)
     assert(maxNumExecutorsNeeded(manager) == 8)
@@ -435,7 +440,7 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 5)
     assert(maxNumExecutorsNeeded(manager) == 5)
     assert(removeExecutor(manager, "1"))
-    assert(removeExecutors(manager, Seq("2", "3"))=== Seq("2", "3"))
+    assert(removeExecutors(manager, Seq("2", "3")) === Seq("2", "3"))
     onExecutorRemoved(manager, "1")
     onExecutorRemoved(manager, "2")
     onExecutorRemoved(manager, "3")
@@ -450,7 +455,7 @@ class ExecutorAllocationManagerSuite
     assert(addExecutors(manager) === 0) // upper limit
   }
 
-  test ("interleaving add and remove") {
+  test("interleaving add and remove") {
     sc = createSparkContext(5, 12, 5)
     val manager = sc.executorAllocationManager.get
     post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(0, 1000)))
@@ -703,7 +708,7 @@ class ExecutorAllocationManagerSuite
     onExecutorAdded(manager, "executor-5")
     onExecutorAdded(manager, "executor-6")
     onExecutorAdded(manager, "executor-7")
-    assert(removeTimes(manager).size === 5)              // 5 active executors
+    assert(removeTimes(manager).size === 5) // 5 active executors
     assert(executorsPendingToRemove(manager).size === 2) // 2 pending to be removed
     onExecutorBusy(manager, "executor-4")
     onExecutorBusy(manager, "executor-5")
@@ -1147,9 +1152,9 @@ class ExecutorAllocationManagerSuite
   }
 
   private def createSparkContext(
-      minExecutors: Int = 1,
-      maxExecutors: Int = 5,
-      initialExecutors: Int = 1): SparkContext = {
+                                  minExecutors: Int = 1,
+                                  maxExecutors: Int = 5,
+                                  initialExecutors: Int = 1): SparkContext = {
     val conf = new SparkConf()
       .setMaster("myDummyLocalExternalClusterManager")
       .setAppName("test-executor-allocation-manager")
@@ -1158,7 +1163,7 @@ class ExecutorAllocationManagerSuite
       .set("spark.dynamicAllocation.maxExecutors", maxExecutors.toString)
       .set("spark.dynamicAllocation.initialExecutors", initialExecutors.toString)
       .set("spark.dynamicAllocation.schedulerBacklogTimeout",
-          s"${schedulerBacklogTimeout.toString}s")
+        s"${schedulerBacklogTimeout.toString}s")
       .set("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout",
         s"${sustainedSchedulerBacklogTimeout.toString}s")
       .set("spark.dynamicAllocation.executorIdleTimeout", s"${executorIdleTimeout.toString}s")
@@ -1174,38 +1179,20 @@ class ExecutorAllocationManagerSuite
 }
 
 /**
- * Helper methods for testing ExecutorAllocationManager.
- * This includes methods to access private methods and fields in ExecutorAllocationManager.
- */
+  * Helper methods for testing ExecutorAllocationManager.
+  * This includes methods to access private methods and fields in ExecutorAllocationManager.
+  */
 private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val schedulerBacklogTimeout = 1L
   private val sustainedSchedulerBacklogTimeout = 2L
   private val executorIdleTimeout = 3L
-
-  private def createStageInfo(
-      stageId: Int,
-      numTasks: Int,
-      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
-    ): StageInfo = {
-    new StageInfo(stageId, 0, "name", numTasks, Seq.empty, Seq.empty, "no details",
-      taskLocalityPreferences = taskLocalityPreferences)
-  }
-
-  private def createTaskInfo(
-      taskId: Int,
-      taskIndex: Int,
-      executorId: String,
-      speculative: Boolean = false): TaskInfo = {
-    new TaskInfo(taskId, taskIndex, 0, 0, executorId, "", TaskLocality.ANY, speculative)
-  }
+  private val _numExecutorsToAdd = PrivateMethod[Int]('numExecutorsToAdd)
+  private val _numExecutorsTarget = PrivateMethod[Int]('numExecutorsTarget)
 
 
   /* ------------------------------------------------------- *
    | Helper methods for accessing private methods and fields |
    * ------------------------------------------------------- */
-
-  private val _numExecutorsToAdd = PrivateMethod[Int]('numExecutorsToAdd)
-  private val _numExecutorsTarget = PrivateMethod[Int]('numExecutorsTarget)
   private val _maxNumExecutorsNeeded = PrivateMethod[Int]('maxNumExecutorsNeeded)
   private val _executorsPendingToRemove =
     PrivateMethod[collection.Set[String]]('executorsPendingToRemove)
@@ -1229,6 +1216,23 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _onSpeculativeTaskSubmitted = PrivateMethod[Unit]('onSpeculativeTaskSubmitted)
   private val _totalRunningTasks = PrivateMethod[Int]('totalRunningTasks)
 
+  private def createStageInfo(
+                               stageId: Int,
+                               numTasks: Int,
+                               taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
+                             ): StageInfo = {
+    new StageInfo(stageId, 0, "name", numTasks, Seq.empty, Seq.empty, "no details",
+      taskLocalityPreferences = taskLocalityPreferences)
+  }
+
+  private def createTaskInfo(
+                              taskId: Int,
+                              taskIndex: Int,
+                              executorId: String,
+                              speculative: Boolean = false): TaskInfo = {
+    new TaskInfo(taskId, taskIndex, 0, 0, executorId, "", TaskLocality.ANY, speculative)
+  }
+
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsToAdd()
   }
@@ -1238,7 +1242,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   }
 
   private def executorsPendingToRemove(
-      manager: ExecutorAllocationManager): collection.Set[String] = {
+                                        manager: ExecutorAllocationManager): collection.Set[String] = {
     manager invokePrivate _executorsPendingToRemove()
   }
 
@@ -1303,7 +1307,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     manager invokePrivate _onExecutorBusy(id)
   }
 
-  private def onSpeculativeTaskSubmitted(manager: ExecutorAllocationManager, id: String) : Unit = {
+  private def onSpeculativeTaskSubmitted(manager: ExecutorAllocationManager, id: String): Unit = {
     manager invokePrivate _onSpeculativeTaskSubmitted(id)
   }
 
@@ -1321,21 +1325,21 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 }
 
 /**
- * A cluster manager which wraps around the scheduler and backend for local mode. It is used for
- * testing the dynamic allocation policy.
- */
+  * A cluster manager which wraps around the scheduler and backend for local mode. It is used for
+  * testing the dynamic allocation policy.
+  */
 private class DummyLocalExternalClusterManager extends ExternalClusterManager {
 
   def canCreate(masterURL: String): Boolean = masterURL == "myDummyLocalExternalClusterManager"
 
   override def createTaskScheduler(
-      sc: SparkContext,
-      masterURL: String): TaskScheduler = new TaskSchedulerImpl(sc, 1, isLocal = true)
+                                    sc: SparkContext,
+                                    masterURL: String): TaskScheduler = new TaskSchedulerImpl(sc, 1, isLocal = true)
 
   override def createSchedulerBackend(
-      sc: SparkContext,
-      masterURL: String,
-      scheduler: TaskScheduler): SchedulerBackend = {
+                                       sc: SparkContext,
+                                       masterURL: String,
+                                       scheduler: TaskScheduler): SchedulerBackend = {
     val sb = new LocalSchedulerBackend(sc.getConf, scheduler.asInstanceOf[TaskSchedulerImpl], 1)
     new DummyLocalSchedulerBackend(sc, sb)
   }
@@ -1347,26 +1351,19 @@ private class DummyLocalExternalClusterManager extends ExternalClusterManager {
 }
 
 /**
- * A scheduler backend which wraps around local scheduler backend and exposes the executor
- * allocation client interface for testing dynamic allocation.
- */
-private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend)
+  * A scheduler backend which wraps around local scheduler backend and exposes the executor
+  * allocation client interface for testing dynamic allocation.
+  */
+private class DummyLocalSchedulerBackend(sc: SparkContext, sb: SchedulerBackend)
   extends SchedulerBackend with ExecutorAllocationClient {
-
-  override private[spark] def getExecutorIds(): Seq[String] = Nil
-
-  override private[spark] def requestTotalExecutors(
-      numExecutors: Int,
-      localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int]): Boolean = true
 
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = true
 
   override def killExecutors(
-      executorIds: Seq[String],
-      adjustTargetNumExecutors: Boolean,
-      countFailures: Boolean,
-      force: Boolean): Seq[String] = executorIds
+                              executorIds: Seq[String],
+                              adjustTargetNumExecutors: Boolean,
+                              countFailures: Boolean,
+                              force: Boolean): Seq[String] = executorIds
 
   override def start(): Unit = sb.start()
 
@@ -1379,4 +1376,11 @@ private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend
   override def killExecutorsOnHost(host: String): Boolean = {
     false
   }
+
+  override private[spark] def getExecutorIds(): Seq[String] = Nil
+
+  override private[spark] def requestTotalExecutors(
+                                                     numExecutors: Int,
+                                                     localityAwareTasks: Int,
+                                                     hostToLocalTaskCount: Map[String, Int]): Boolean = true
 }

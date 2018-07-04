@@ -17,47 +17,41 @@
 
 package org.apache.spark
 
-import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable.LinkedHashSet
+import java.util.{Map => JMap}
 
 import org.apache.avro.{Schema, SchemaNormalization}
-
 import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.LinkedHashSet
+
 /**
- * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
- *
- * Most of the time, you would create a SparkConf object with `new SparkConf()`, which will load
- * values from any `spark.*` Java system properties set in your application as well. In this case,
- * parameters you set directly on the `SparkConf` object take priority over system properties.
- *
- * For unit tests, you can also call `new SparkConf(false)` to skip loading external settings and
- * get the same configuration no matter what the system properties are.
- *
- * All setter methods in this class support chaining. For example, you can write
- * `new SparkConf().setMaster("local").setAppName("My app")`.
- *
- * @param loadDefaults whether to also load values from Java system properties
- *
- * @note Once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
- * by the user. Spark does not support modifying the configuration at runtime.
- */
+  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
+  *
+  * Most of the time, you would create a SparkConf object with `new SparkConf()`, which will load
+  * values from any `spark.*` Java system properties set in your application as well. In this case,
+  * parameters you set directly on the `SparkConf` object take priority over system properties.
+  *
+  * For unit tests, you can also call `new SparkConf(false)` to skip loading external settings and
+  * get the same configuration no matter what the system properties are.
+  *
+  * All setter methods in this class support chaining. For example, you can write
+  * `new SparkConf().setMaster("local").setAppName("My app")`.
+  *
+  * @param loadDefaults whether to also load values from Java system properties
+  * @note Once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
+  *       by the user. Spark does not support modifying the configuration at runtime.
+  */
 class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Serializable {
 
   import SparkConf._
 
-  /** Create a SparkConf that loads defaults from system properties and the classpath */
-  def this() = this(true)
-
-  private val settings = new ConcurrentHashMap[String, String]()
-
+  private final val avroNamespace = "avro.schema."
   @transient private lazy val reader: ConfigReader = {
     val _reader = new ConfigReader(new SparkConfigProvider(settings))
     _reader.bindEnv(new ConfigProvider {
@@ -65,17 +59,37 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     })
     _reader
   }
+  private val settings = new ConcurrentHashMap[String, String]()
 
   if (loadDefaults) {
     loadFromSystemProperties(false)
   }
 
-  private[spark] def loadFromSystemProperties(silent: Boolean): SparkConf = {
-    // Load any spark.* system properties
-    for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
-      set(key, value, silent)
-    }
-    this
+  /** Create a SparkConf that loads defaults from system properties and the classpath */
+  def this() = this(true)
+
+  /**
+    * The master URL to connect to, such as "local" to run locally with one thread, "local[4]" to
+    * run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
+    */
+  def setMaster(master: String): SparkConf = {
+    set("spark.master", master)
+  }
+
+  /** Set a name for your application. Shown in the Spark web UI. */
+  def setAppName(name: String): SparkConf = {
+    set("spark.app.name", name)
+  }
+
+  /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
+  def setJars(jars: Array[String]): SparkConf = {
+    setJars(jars.toSeq)
+  }
+
+  /** Set JAR files to distribute to the cluster. */
+  def setJars(jars: Seq[String]): SparkConf = {
+    for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor")
+    set("spark.jars", jars.filter(_ != null).mkString(","))
   }
 
   /** Set a configuration variable. */
@@ -97,54 +111,19 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     this
   }
 
-  private[spark] def set[T](entry: ConfigEntry[T], value: T): SparkConf = {
-    set(entry.key, entry.stringConverter(value))
-    this
-  }
-
-  private[spark] def set[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
-    set(entry.key, entry.rawStringConverter(value))
-    this
+  /**
+    * Set multiple environment variables to be used when launching executors.
+    * (Java-friendly version.)
+    */
+  def setExecutorEnv(variables: Array[(String, String)]): SparkConf = {
+    setExecutorEnv(variables.toSeq)
   }
 
   /**
-   * The master URL to connect to, such as "local" to run locally with one thread, "local[4]" to
-   * run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
-   */
-  def setMaster(master: String): SparkConf = {
-    set("spark.master", master)
-  }
-
-  /** Set a name for your application. Shown in the Spark web UI. */
-  def setAppName(name: String): SparkConf = {
-    set("spark.app.name", name)
-  }
-
-  /** Set JAR files to distribute to the cluster. */
-  def setJars(jars: Seq[String]): SparkConf = {
-    for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor")
-    set("spark.jars", jars.filter(_ != null).mkString(","))
-  }
-
-  /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
-  def setJars(jars: Array[String]): SparkConf = {
-    setJars(jars.toSeq)
-  }
-
-  /**
-   * Set an environment variable to be used when launching executors for this application.
-   * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
-   * (for example spark.executorEnv.PATH) but this method makes them easier to set.
-   */
-  def setExecutorEnv(variable: String, value: String): SparkConf = {
-    set("spark.executorEnv." + variable, value)
-  }
-
-  /**
-   * Set multiple environment variables to be used when launching executors.
-   * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
-   * (for example spark.executorEnv.PATH) but this method makes them easier to set.
-   */
+    * Set multiple environment variables to be used when launching executors.
+    * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
+    * (for example spark.executorEnv.PATH) but this method makes them easier to set.
+    */
   def setExecutorEnv(variables: Seq[(String, String)]): SparkConf = {
     for ((k, v) <- variables) {
       setExecutorEnv(k, v)
@@ -153,16 +132,17 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /**
-   * Set multiple environment variables to be used when launching executors.
-   * (Java-friendly version.)
-   */
-  def setExecutorEnv(variables: Array[(String, String)]): SparkConf = {
-    setExecutorEnv(variables.toSeq)
+    * Set an environment variable to be used when launching executors for this application.
+    * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
+    * (for example spark.executorEnv.PATH) but this method makes them easier to set.
+    */
+  def setExecutorEnv(variable: String, value: String): SparkConf = {
+    set("spark.executorEnv." + variable, value)
   }
 
   /**
-   * Set the location where Spark is installed on worker nodes.
-   */
+    * Set the location where Spark is installed on worker nodes.
+    */
   def setSparkHome(home: String): SparkConf = {
     set("spark.home", home)
   }
@@ -181,24 +161,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     this
   }
 
-  private[spark] def setIfMissing[T](entry: ConfigEntry[T], value: T): SparkConf = {
-    if (settings.putIfAbsent(entry.key, entry.stringConverter(value)) == null) {
-      logDeprecationWarning(entry.key)
-    }
-    this
-  }
-
-  private[spark] def setIfMissing[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
-    if (settings.putIfAbsent(entry.key, entry.rawStringConverter(value)) == null) {
-      logDeprecationWarning(entry.key)
-    }
-    this
-  }
-
   /**
-   * Use Kryo serialization and register the given set of classes with Kryo.
-   * If called multiple times, this will append the classes from all calls together.
-   */
+    * Use Kryo serialization and register the given set of classes with Kryo.
+    * If called multiple times, this will append the classes from all calls together.
+    */
   def registerKryoClasses(classes: Array[Class[_]]): SparkConf = {
     val allClassNames = new LinkedHashSet[String]()
     allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').map(_.trim)
@@ -210,12 +176,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     this
   }
 
-  private final val avroNamespace = "avro.schema."
-
   /**
-   * Use Kryo serialization and register the given set of Avro schemas so that the generic
-   * record serializer can decrease network IO
-   */
+    * Use Kryo serialization and register the given set of Avro schemas so that the generic
+    * record serializer can decrease network IO
+    */
   def registerAvroSchemas(schemas: Schema*): SparkConf = {
     for (schema <- schemas) {
       set(avroNamespace + SchemaNormalization.parsingFingerprint64(schema), schema.toString)
@@ -230,19 +194,130 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       .toMap
   }
 
-  /** Remove a parameter from the configuration */
-  def remove(key: String): SparkConf = {
-    settings.remove(key)
-    this
+  /** Get all parameters as a list of pairs */
+  def getAll: Array[(String, String)] = {
+    settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
   }
 
-  private[spark] def remove(entry: ConfigEntry[_]): SparkConf = {
-    remove(entry.key)
+  /**
+    * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
+    * suffix is provided then seconds are assumed.
+    *
+    * @throws java.util.NoSuchElementException If the time parameter is not set
+    * @throws NumberFormatException            If the value cannot be interpreted as seconds
+    */
+  def getTimeAsSeconds(key: String): Long = catchIllegalValue(key) {
+    Utils.timeStringAsSeconds(get(key))
+  }
+
+  /**
+    * Get a time parameter as seconds, falling back to a default if not set. If no
+    * suffix is provided then seconds are assumed.
+    *
+    * @throws NumberFormatException If the value cannot be interpreted as seconds
+    */
+  def getTimeAsSeconds(key: String, defaultValue: String): Long = catchIllegalValue(key) {
+    Utils.timeStringAsSeconds(get(key, defaultValue))
+  }
+
+  /**
+    * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no
+    * suffix is provided then milliseconds are assumed.
+    *
+    * @throws java.util.NoSuchElementException If the time parameter is not set
+    * @throws NumberFormatException            If the value cannot be interpreted as milliseconds
+    */
+  def getTimeAsMs(key: String): Long = catchIllegalValue(key) {
+    Utils.timeStringAsMs(get(key))
   }
 
   /** Get a parameter; throws a NoSuchElementException if it's not set */
   def get(key: String): String = {
     getOption(key).getOrElse(throw new NoSuchElementException(key))
+  }
+
+  /** Get a parameter as an Option */
+  def getOption(key: String): Option[String] = {
+    Option(settings.get(key)).orElse(getDeprecatedConfig(key, settings))
+  }
+
+  /**
+    * Wrapper method for get() methods which require some specific value format. This catches
+    * any [[NumberFormatException]] or [[IllegalArgumentException]] and re-raises it with the
+    * incorrectly configured key in the exception message.
+    */
+  private def catchIllegalValue[T](key: String)(getValue: => T): T = {
+    try {
+      getValue
+    } catch {
+      case e: NumberFormatException =>
+        // NumberFormatException doesn't have a constructor that takes a cause for some reason.
+        throw new NumberFormatException(s"Illegal value for config key $key: ${e.getMessage}")
+          .initCause(e)
+      case e: IllegalArgumentException =>
+        throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}", e)
+    }
+  }
+
+  /**
+    * Get a time parameter as milliseconds, falling back to a default if not set. If no
+    * suffix is provided then milliseconds are assumed.
+    *
+    * @throws NumberFormatException If the value cannot be interpreted as milliseconds
+    */
+  def getTimeAsMs(key: String, defaultValue: String): Long = catchIllegalValue(key) {
+    Utils.timeStringAsMs(get(key, defaultValue))
+  }
+
+  /**
+    * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
+    * suffix is provided then bytes are assumed.
+    *
+    * @throws java.util.NoSuchElementException If the size parameter is not set
+    * @throws NumberFormatException            If the value cannot be interpreted as bytes
+    */
+  def getSizeAsBytes(key: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsBytes(get(key))
+  }
+
+  /**
+    * Get a size parameter as bytes, falling back to a default if not set. If no
+    * suffix is provided then bytes are assumed.
+    *
+    * @throws NumberFormatException If the value cannot be interpreted as bytes
+    */
+  def getSizeAsBytes(key: String, defaultValue: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsBytes(get(key, defaultValue))
+  }
+
+  /**
+    * Get a size parameter as bytes, falling back to a default if not set.
+    *
+    * @throws NumberFormatException If the value cannot be interpreted as bytes
+    */
+  def getSizeAsBytes(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
+    Utils.byteStringAsBytes(get(key, defaultValue + "B"))
+  }
+
+  /**
+    * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
+    * suffix is provided then Kibibytes are assumed.
+    *
+    * @throws java.util.NoSuchElementException If the size parameter is not set
+    * @throws NumberFormatException            If the value cannot be interpreted as Kibibytes
+    */
+  def getSizeAsKb(key: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsKb(get(key))
+  }
+
+  /**
+    * Get a size parameter as Kibibytes, falling back to a default if not set. If no
+    * suffix is provided then Kibibytes are assumed.
+    *
+    * @throws NumberFormatException If the value cannot be interpreted as Kibibytes
+    */
+  def getSizeAsKb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsKb(get(key, defaultValue))
   }
 
   /** Get a parameter, falling back to a default if not set */
@@ -251,190 +326,79 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /**
-   * Retrieves the value of a pre-defined configuration entry.
-   *
-   * - This is an internal Spark API.
-   * - The return type if defined by the configuration entry.
-   * - This will throw an exception is the config is not optional and the value is not set.
-   */
-  private[spark] def get[T](entry: ConfigEntry[T]): T = {
-    entry.readFrom(reader)
-  }
-
-  /**
-   * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then seconds are assumed.
-   * @throws java.util.NoSuchElementException If the time parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as seconds
-   */
-  def getTimeAsSeconds(key: String): Long = catchIllegalValue(key) {
-    Utils.timeStringAsSeconds(get(key))
-  }
-
-  /**
-   * Get a time parameter as seconds, falling back to a default if not set. If no
-   * suffix is provided then seconds are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as seconds
-   */
-  def getTimeAsSeconds(key: String, defaultValue: String): Long = catchIllegalValue(key) {
-    Utils.timeStringAsSeconds(get(key, defaultValue))
-  }
-
-  /**
-   * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then milliseconds are assumed.
-   * @throws java.util.NoSuchElementException If the time parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as milliseconds
-   */
-  def getTimeAsMs(key: String): Long = catchIllegalValue(key) {
-    Utils.timeStringAsMs(get(key))
-  }
-
-  /**
-   * Get a time parameter as milliseconds, falling back to a default if not set. If no
-   * suffix is provided then milliseconds are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as milliseconds
-   */
-  def getTimeAsMs(key: String, defaultValue: String): Long = catchIllegalValue(key) {
-    Utils.timeStringAsMs(get(key, defaultValue))
-  }
-
-  /**
-   * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then bytes are assumed.
-   * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as bytes
-   */
-  def getSizeAsBytes(key: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsBytes(get(key))
-  }
-
-  /**
-   * Get a size parameter as bytes, falling back to a default if not set. If no
-   * suffix is provided then bytes are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as bytes
-   */
-  def getSizeAsBytes(key: String, defaultValue: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsBytes(get(key, defaultValue))
-  }
-
-  /**
-   * Get a size parameter as bytes, falling back to a default if not set.
-   * @throws NumberFormatException If the value cannot be interpreted as bytes
-   */
-  def getSizeAsBytes(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
-    Utils.byteStringAsBytes(get(key, defaultValue + "B"))
-  }
-
-  /**
-   * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then Kibibytes are assumed.
-   * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as Kibibytes
-   */
-  def getSizeAsKb(key: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsKb(get(key))
-  }
-
-  /**
-   * Get a size parameter as Kibibytes, falling back to a default if not set. If no
-   * suffix is provided then Kibibytes are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as Kibibytes
-   */
-  def getSizeAsKb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsKb(get(key, defaultValue))
-  }
-
-  /**
-   * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then Mebibytes are assumed.
-   * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as Mebibytes
-   */
+    * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
+    * suffix is provided then Mebibytes are assumed.
+    *
+    * @throws java.util.NoSuchElementException If the size parameter is not set
+    * @throws NumberFormatException            If the value cannot be interpreted as Mebibytes
+    */
   def getSizeAsMb(key: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsMb(get(key))
   }
 
   /**
-   * Get a size parameter as Mebibytes, falling back to a default if not set. If no
-   * suffix is provided then Mebibytes are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as Mebibytes
-   */
+    * Get a size parameter as Mebibytes, falling back to a default if not set. If no
+    * suffix is provided then Mebibytes are assumed.
+    *
+    * @throws NumberFormatException If the value cannot be interpreted as Mebibytes
+    */
   def getSizeAsMb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsMb(get(key, defaultValue))
   }
 
   /**
-   * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then Gibibytes are assumed.
-   * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as Gibibytes
-   */
+    * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
+    * suffix is provided then Gibibytes are assumed.
+    *
+    * @throws java.util.NoSuchElementException If the size parameter is not set
+    * @throws NumberFormatException            If the value cannot be interpreted as Gibibytes
+    */
   def getSizeAsGb(key: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsGb(get(key))
   }
 
   /**
-   * Get a size parameter as Gibibytes, falling back to a default if not set. If no
-   * suffix is provided then Gibibytes are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as Gibibytes
-   */
+    * Get a size parameter as Gibibytes, falling back to a default if not set. If no
+    * suffix is provided then Gibibytes are assumed.
+    *
+    * @throws NumberFormatException If the value cannot be interpreted as Gibibytes
+    */
   def getSizeAsGb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
     Utils.byteStringAsGb(get(key, defaultValue))
   }
 
-  /** Get a parameter as an Option */
-  def getOption(key: String): Option[String] = {
-    Option(settings.get(key)).orElse(getDeprecatedConfig(key, settings))
-  }
-
-  /** Get an optional value, applying variable substitution. */
-  private[spark] def getWithSubstitution(key: String): Option[String] = {
-    getOption(key).map(reader.substitute(_))
-  }
-
-  /** Get all parameters as a list of pairs */
-  def getAll: Array[(String, String)] = {
-    settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
-  }
-
   /**
-   * Get all parameters that start with `prefix`
-   */
-  def getAllWithPrefix(prefix: String): Array[(String, String)] = {
-    getAll.filter { case (k, v) => k.startsWith(prefix) }
-      .map { case (k, v) => (k.substring(prefix.length), v) }
-  }
-
-
-  /**
-   * Get a parameter as an integer, falling back to a default if not set
-   * @throws NumberFormatException If the value cannot be interpreted as an integer
-   */
+    * Get a parameter as an integer, falling back to a default if not set
+    *
+    * @throws NumberFormatException If the value cannot be interpreted as an integer
+    */
   def getInt(key: String, defaultValue: Int): Int = catchIllegalValue(key) {
     getOption(key).map(_.toInt).getOrElse(defaultValue)
   }
 
   /**
-   * Get a parameter as a long, falling back to a default if not set
-   * @throws NumberFormatException If the value cannot be interpreted as a long
-   */
+    * Get a parameter as a long, falling back to a default if not set
+    *
+    * @throws NumberFormatException If the value cannot be interpreted as a long
+    */
   def getLong(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
     getOption(key).map(_.toLong).getOrElse(defaultValue)
   }
 
   /**
-   * Get a parameter as a double, falling back to a default if not ste
-   * @throws NumberFormatException If the value cannot be interpreted as a double
-   */
+    * Get a parameter as a double, falling back to a default if not ste
+    *
+    * @throws NumberFormatException If the value cannot be interpreted as a double
+    */
   def getDouble(key: String, defaultValue: Double): Double = catchIllegalValue(key) {
     getOption(key).map(_.toDouble).getOrElse(defaultValue)
   }
 
   /**
-   * Get a parameter as a boolean, falling back to a default if not set
-   * @throws IllegalArgumentException If the value cannot be interpreted as a boolean
-   */
+    * Get a parameter as a boolean, falling back to a default if not set
+    *
+    * @throws IllegalArgumentException If the value cannot be interpreted as a boolean
+    */
   def getBoolean(key: String, defaultValue: Boolean): Boolean = catchIllegalValue(key) {
     getOption(key).map(_.toBoolean).getOrElse(defaultValue)
   }
@@ -445,9 +409,17 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /**
-   * Returns the Spark application id, valid in the Driver after TaskScheduler registration and
-   * from the start in the Executor.
-   */
+    * Get all parameters that start with `prefix`
+    */
+  def getAllWithPrefix(prefix: String): Array[(String, String)] = {
+    getAll.filter { case (k, v) => k.startsWith(prefix) }
+      .map { case (k, v) => (k.substring(prefix.length), v) }
+  }
+
+  /**
+    * Returns the Spark application id, valid in the Driver after TaskScheduler registration and
+    * from the start in the Executor.
+    */
   def getAppId: String = get("spark.app.id")
 
   /** Does the configuration contain a given parameter? */
@@ -455,8 +427,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     settings.containsKey(key) ||
       configsWithAlternatives.get(key).toSeq.flatten.exists { alt => contains(alt.key) }
   }
-
-  private[spark] def contains(entry: ConfigEntry[_]): Boolean = contains(entry.key)
 
   /** Copy this object */
   override def clone: SparkConf = {
@@ -468,33 +438,83 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /**
-   * By using this instead of System.getenv(), environment variables can be mocked
-   * in unit tests.
-   */
-  private[spark] def getenv(name: String): String = System.getenv(name)
+    * Return a string listing all keys and values, one per line. This is useful to print the
+    * configuration out for debugging.
+    */
+  def toDebugString: String = {
+    getAll.sorted.map { case (k, v) => k + "=" + v }.mkString("\n")
+  }
 
-  /**
-   * Wrapper method for get() methods which require some specific value format. This catches
-   * any [[NumberFormatException]] or [[IllegalArgumentException]] and re-raises it with the
-   * incorrectly configured key in the exception message.
-   */
-  private def catchIllegalValue[T](key: String)(getValue: => T): T = {
-    try {
-      getValue
-    } catch {
-      case e: NumberFormatException =>
-        // NumberFormatException doesn't have a constructor that takes a cause for some reason.
-        throw new NumberFormatException(s"Illegal value for config key $key: ${e.getMessage}")
-            .initCause(e)
-      case e: IllegalArgumentException =>
-        throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}", e)
+  private[spark] def loadFromSystemProperties(silent: Boolean): SparkConf = {
+    // Load any spark.* system properties
+    for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
+      set(key, value, silent)
     }
+    this
+  }
+
+  private[spark] def set[T](entry: ConfigEntry[T], value: T): SparkConf = {
+    set(entry.key, entry.stringConverter(value))
+    this
+  }
+
+  private[spark] def set[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
+    set(entry.key, entry.rawStringConverter(value))
+    this
+  }
+
+  private[spark] def setIfMissing[T](entry: ConfigEntry[T], value: T): SparkConf = {
+    if (settings.putIfAbsent(entry.key, entry.stringConverter(value)) == null) {
+      logDeprecationWarning(entry.key)
+    }
+    this
+  }
+
+  private[spark] def setIfMissing[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
+    if (settings.putIfAbsent(entry.key, entry.rawStringConverter(value)) == null) {
+      logDeprecationWarning(entry.key)
+    }
+    this
+  }
+
+  private[spark] def remove(entry: ConfigEntry[_]): SparkConf = {
+    remove(entry.key)
+  }
+
+  /** Remove a parameter from the configuration */
+  def remove(key: String): SparkConf = {
+    settings.remove(key)
+    this
   }
 
   /**
-   * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
-   * idempotent - may mutate this conf object to convert deprecated settings to supported ones.
-   */
+    * Retrieves the value of a pre-defined configuration entry.
+    *
+    * - This is an internal Spark API.
+    * - The return type if defined by the configuration entry.
+    * - This will throw an exception is the config is not optional and the value is not set.
+    */
+  private[spark] def get[T](entry: ConfigEntry[T]): T = {
+    entry.readFrom(reader)
+  }
+
+  /** Get an optional value, applying variable substitution. */
+  private[spark] def getWithSubstitution(key: String): Option[String] = {
+    getOption(key).map(reader.substitute(_))
+  }
+
+  private[spark] def contains(entry: ConfigEntry[_]): Boolean = contains(entry.key)
+
+  /**
+    * By using this instead of System.getenv(), environment variables can be mocked
+    * in unit tests.
+    */
+  private[spark] def getenv(name: String): String = System.getenv(name)
+
+  /**
+    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
+    * idempotent - may mutate this conf object to convert deprecated settings to supported ones.
+    */
   private[spark] def validateSettings() {
     if (contains("spark.local.dir")) {
       val msg = "Note that spark.local.dir will be overridden by the value set by " +
@@ -514,9 +534,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     sys.props.get("spark.driver.libraryPath").foreach { value =>
       val warning =
         s"""
-          |spark.driver.libraryPath was detected (set to '$value').
-          |This is deprecated in Spark 1.2+.
-          |
+           |spark.driver.libraryPath was detected (set to '$value').
+           |This is deprecated in Spark 1.2+.
+           |
           |Please instead use: $driverLibraryPathKey
         """.stripMargin
       logWarning(warning)
@@ -618,29 +638,21 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       s"spark.executor.heartbeatInterval=${executorHeartbeatInterval}s.")
   }
 
-  /**
-   * Return a string listing all keys and values, one per line. This is useful to print the
-   * configuration out for debugging.
-   */
-  def toDebugString: String = {
-    getAll.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
-  }
-
 }
 
 private[spark] object SparkConf extends Logging {
 
   /**
-   * Maps deprecated config keys to information about the deprecation.
-   *
-   * The extra information is logged as a warning when the config is present in the user's
-   * configuration.
-   */
+    * Maps deprecated config keys to information about the deprecation.
+    *
+    * The extra information is logged as a warning when the config is present in the user's
+    * configuration.
+    */
   private val deprecatedConfigs: Map[String, DeprecatedConfig] = {
     val configs = Seq(
       DeprecatedConfig("spark.cache.class", "0.8",
         "The spark.cache.class property is no longer being used! Specify storage levels using " +
-        "the RDD.persist() method instead."),
+          "the RDD.persist() method instead."),
       DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
         "Please use spark.{driver,executor}.userClassPathFirst instead."),
       DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
@@ -658,17 +670,17 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore.")
     )
 
-    Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
+    Map(configs.map { cfg => (cfg.key -> cfg) }: _*)
   }
 
   /**
-   * Maps a current config key to alternate keys that were used in previous version of Spark.
-   *
-   * The alternates are used in the order defined in this map. If deprecated configs are
-   * present in the user's configuration, a warning is logged.
-   *
-   * TODO: consolidate it with `ConfigBuilder.withAlternative`.
-   */
+    * Maps a current config key to alternate keys that were used in previous version of Spark.
+    *
+    * The alternates are used in the order defined in this map. If deprecated configs are
+    * present in the user's configuration, a warning is logged.
+    *
+    * TODO: consolidate it with `ConfigBuilder.withAlternative`.
+    */
   private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
     "spark.executor.userClassPathFirst" -> Seq(
       AlternateConfig("spark.files.userClassPathFirst", "1.3")),
@@ -730,11 +742,11 @@ private[spark] object SparkConf extends Logging {
   )
 
   /**
-   * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
-   * config keys.
-   *
-   * Maps the deprecated config name to a 2-tuple (new config name, alternate config info).
-   */
+    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
+    * config keys.
+    *
+    * Maps the deprecated config name to a 2-tuple (new config name, alternate config info).
+    */
   private val allAlternatives: Map[String, (String, AlternateConfig)] = {
     configsWithAlternatives.keys.flatMap { key =>
       configsWithAlternatives(key).map { cfg => (cfg.key -> (key -> cfg)) }
@@ -742,30 +754,30 @@ private[spark] object SparkConf extends Logging {
   }
 
   /**
-   * Return whether the given config should be passed to an executor on start-up.
-   *
-   * Certain authentication configs are required from the executor when it connects to
-   * the scheduler, while the rest of the spark configs can be inherited from the driver later.
-   */
+    * Return whether the given config should be passed to an executor on start-up.
+    *
+    * Certain authentication configs are required from the executor when it connects to
+    * the scheduler, while the rest of the spark configs can be inherited from the driver later.
+    */
   def isExecutorStartupConf(name: String): Boolean = {
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
-    name.startsWith("spark.ssl") ||
-    name.startsWith("spark.rpc") ||
-    name.startsWith("spark.network") ||
-    isSparkPortConf(name)
+      name.startsWith("spark.ssl") ||
+      name.startsWith("spark.rpc") ||
+      name.startsWith("spark.network") ||
+      isSparkPortConf(name)
   }
 
   /**
-   * Return true if the given config matches either `spark.*.port` or `spark.port.*`.
-   */
+    * Return true if the given config matches either `spark.*.port` or `spark.port.*`.
+    */
   def isSparkPortConf(name: String): Boolean = {
     (name.startsWith("spark.") && name.endsWith(".port")) || name.startsWith("spark.port.")
   }
 
   /**
-   * Looks for available deprecated keys for the given config option, and return the first
-   * value available.
-   */
+    * Looks for available deprecated keys for the given config option, and return the first
+    * value available.
+    */
   def getDeprecatedConfig(key: String, conf: JMap[String, String]): Option[String] = {
     configsWithAlternatives.get(key).flatMap { alts =>
       alts.collectFirst { case alt if conf.containsKey(alt.key) =>
@@ -776,20 +788,20 @@ private[spark] object SparkConf extends Logging {
   }
 
   /**
-   * Logs a warning message if the given config key is deprecated.
-   */
+    * Logs a warning message if the given config key is deprecated.
+    */
   def logDeprecationWarning(key: String): Unit = {
     deprecatedConfigs.get(key).foreach { cfg =>
       logWarning(
         s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-        s"may be removed in the future. ${cfg.deprecationMessage}")
+          s"may be removed in the future. ${cfg.deprecationMessage}")
       return
     }
 
     allAlternatives.get(key).foreach { case (newKey, cfg) =>
       logWarning(
         s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-        s"may be removed in the future. Please use the new key '$newKey' instead.")
+          s"may be removed in the future. Please use the new key '$newKey' instead.")
       return
     }
     if (key.startsWith("spark.akka") || key.startsWith("spark.ssl.akka")) {
@@ -800,27 +812,27 @@ private[spark] object SparkConf extends Logging {
   }
 
   /**
-   * Holds information about keys that have been deprecated and do not have a replacement.
-   *
-   * @param key The deprecated key.
-   * @param version Version of Spark where key was deprecated.
-   * @param deprecationMessage Message to include in the deprecation warning.
-   */
+    * Holds information about keys that have been deprecated and do not have a replacement.
+    *
+    * @param key                The deprecated key.
+    * @param version            Version of Spark where key was deprecated.
+    * @param deprecationMessage Message to include in the deprecation warning.
+    */
   private case class DeprecatedConfig(
-      key: String,
-      version: String,
-      deprecationMessage: String)
+                                       key: String,
+                                       version: String,
+                                       deprecationMessage: String)
 
   /**
-   * Information about an alternate configuration key that has been deprecated.
-   *
-   * @param key The deprecated config key.
-   * @param version The Spark version in which the key was deprecated.
-   * @param translation A translation function for converting old config values into new ones.
-   */
+    * Information about an alternate configuration key that has been deprecated.
+    *
+    * @param key         The deprecated config key.
+    * @param version     The Spark version in which the key was deprecated.
+    * @param translation A translation function for converting old config values into new ones.
+    */
   private case class AlternateConfig(
-      key: String,
-      version: String,
-      translation: String => String = null)
+                                      key: String,
+                                      version: String,
+                                      translation: String => String = null)
 
 }
