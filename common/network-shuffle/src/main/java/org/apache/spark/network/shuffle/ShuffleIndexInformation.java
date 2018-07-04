@@ -29,39 +29,42 @@ import java.nio.file.Files;
  * as an in-memory LongBuffer.
  */
 public class ShuffleIndexInformation {
-  /** offsets as long buffer */
-  private final LongBuffer offsets;
-  private int size;
+    /**
+     * offsets as long buffer
+     */
+    private final LongBuffer offsets;
+    private int size;
 
-  public ShuffleIndexInformation(File indexFile) throws IOException {
-    size = (int)indexFile.length();
-    ByteBuffer buffer = ByteBuffer.allocate(size);
-    offsets = buffer.asLongBuffer();
-    DataInputStream dis = null;
-    try {
-      dis = new DataInputStream(Files.newInputStream(indexFile.toPath()));
-      dis.readFully(buffer.array());
-    } finally {
-      if (dis != null) {
-        dis.close();
-      }
+    public ShuffleIndexInformation(File indexFile) throws IOException {
+        size = (int) indexFile.length();
+        ByteBuffer buffer = ByteBuffer.allocate(size);
+        offsets = buffer.asLongBuffer();
+        DataInputStream dis = null;
+        try {
+            dis = new DataInputStream(Files.newInputStream(indexFile.toPath()));
+            dis.readFully(buffer.array());
+        } finally {
+            if (dis != null) {
+                dis.close();
+            }
+        }
     }
-  }
 
-  /**
-   * Size of the index file
-   * @return size
-   */
-  public int getSize() {
-    return size;
-  }
+    /**
+     * Size of the index file
+     *
+     * @return size
+     */
+    public int getSize() {
+        return size;
+    }
 
-  /**
-   * Get index offset for a particular reducer.
-   */
-  public ShuffleIndexRecord getIndex(int reduceId) {
-    long offset = offsets.get(reduceId);
-    long nextOffset = offsets.get(reduceId + 1);
-    return new ShuffleIndexRecord(offset, nextOffset - offset);
-  }
+    /**
+     * Get index offset for a particular reducer.
+     */
+    public ShuffleIndexRecord getIndex(int reduceId) {
+        long offset = offsets.get(reduceId);
+        long nextOffset = offsets.get(reduceId + 1);
+        return new ShuffleIndexRecord(offset, nextOffset - offset);
+    }
 }

@@ -25,12 +25,14 @@ import java.io.File;
  */
 public interface TempFileManager {
 
-  /** Create a temp block file. */
-  File createTempFile();
+    /**
+     * Create a temp block file.
+     */
+    File createTempFile();
 
-  /**
-   * Register a temp file to clean up when it won't be used any more. Return whether the
-   * file is registered successfully. If `false`, the caller should clean up the file by itself.
-   */
-  boolean registerTempFileToClean(File file);
+    /**
+     * Register a temp file to clean up when it won't be used any more. Return whether the
+     * file is registered successfully. If `false`, the caller should clean up the file by itself.
+     */
+    boolean registerTempFileToClean(File file);
 }

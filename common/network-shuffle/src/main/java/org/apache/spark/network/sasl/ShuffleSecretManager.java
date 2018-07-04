@@ -17,75 +17,72 @@
 
 package org.apache.spark.network.sasl;
 
-import java.nio.ByteBuffer;
-import java.util.concurrent.ConcurrentHashMap;
-
+import org.apache.spark.network.util.JavaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.util.JavaUtils;
+import java.nio.ByteBuffer;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A class that manages shuffle secret used by the external shuffle service.
  */
 public class ShuffleSecretManager implements SecretKeyHolder {
-  private static final Logger logger = LoggerFactory.getLogger(ShuffleSecretManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(ShuffleSecretManager.class);
+    // Spark user used for authenticating SASL connections
+    // Note that this must match the value in org.apache.spark.SecurityManager
+    private static final String SPARK_SASL_USER = "sparkSaslUser";
+    private final ConcurrentHashMap<String, String> shuffleSecretMap;
 
-  private final ConcurrentHashMap<String, String> shuffleSecretMap;
+    public ShuffleSecretManager() {
+        shuffleSecretMap = new ConcurrentHashMap<>();
+    }
 
-  // Spark user used for authenticating SASL connections
-  // Note that this must match the value in org.apache.spark.SecurityManager
-  private static final String SPARK_SASL_USER = "sparkSaslUser";
+    /**
+     * Register an application with its secret.
+     * Executors need to first authenticate themselves with the same secret before
+     * fetching shuffle files written by other executors in this application.
+     */
+    public void registerApp(String appId, String shuffleSecret) {
+        // Always put the new secret information to make sure it's the most up to date.
+        // Otherwise we have to specifically look at the application attempt in addition
+        // to the applicationId since the secrets change between application attempts on yarn.
+        shuffleSecretMap.put(appId, shuffleSecret);
+        logger.info("Registered shuffle secret for application {}", appId);
+    }
 
-  public ShuffleSecretManager() {
-    shuffleSecretMap = new ConcurrentHashMap<>();
-  }
+    /**
+     * Register an application with its secret specified as a byte buffer.
+     */
+    public void registerApp(String appId, ByteBuffer shuffleSecret) {
+        registerApp(appId, JavaUtils.bytesToString(shuffleSecret));
+    }
 
-  /**
-   * Register an application with its secret.
-   * Executors need to first authenticate themselves with the same secret before
-   * fetching shuffle files written by other executors in this application.
-   */
-  public void registerApp(String appId, String shuffleSecret) {
-    // Always put the new secret information to make sure it's the most up to date.
-    // Otherwise we have to specifically look at the application attempt in addition
-    // to the applicationId since the secrets change between application attempts on yarn.
-    shuffleSecretMap.put(appId, shuffleSecret);
-    logger.info("Registered shuffle secret for application {}", appId);
-  }
+    /**
+     * Unregister an application along with its secret.
+     * This is called when the application terminates.
+     */
+    public void unregisterApp(String appId) {
+        shuffleSecretMap.remove(appId);
+        logger.info("Unregistered shuffle secret for application {}", appId);
+    }
 
-  /**
-   * Register an application with its secret specified as a byte buffer.
-   */
-  public void registerApp(String appId, ByteBuffer shuffleSecret) {
-    registerApp(appId, JavaUtils.bytesToString(shuffleSecret));
-  }
+    /**
+     * Return the Spark user for authenticating SASL connections.
+     */
+    @Override
+    public String getSaslUser(String appId) {
+        return SPARK_SASL_USER;
+    }
 
-  /**
-   * Unregister an application along with its secret.
-   * This is called when the application terminates.
-   */
-  public void unregisterApp(String appId) {
-    shuffleSecretMap.remove(appId);
-    logger.info("Unregistered shuffle secret for application {}", appId);
-  }
-
-  /**
-   * Return the Spark user for authenticating SASL connections.
-   */
-  @Override
-  public String getSaslUser(String appId) {
-    return SPARK_SASL_USER;
-  }
-
-  /**
-   * Return the secret key registered with the given application.
-   * This key is used to authenticate the executors before they can fetch shuffle files
-   * written by this application from the external shuffle service. If the specified
-   * application is not registered, return null.
-   */
-  @Override
-  public String getSecretKey(String appId) {
-    return shuffleSecretMap.get(appId);
-  }
+    /**
+     * Return the secret key registered with the given application.
+     * This key is used to authenticate the executors before they can fetch shuffle files
+     * written by this application from the external shuffle service. If the specified
+     * application is not registered, return null.
+     */
+    @Override
+    public String getSecretKey(String appId) {
+        return shuffleSecretMap.get(appId);
+    }
 }

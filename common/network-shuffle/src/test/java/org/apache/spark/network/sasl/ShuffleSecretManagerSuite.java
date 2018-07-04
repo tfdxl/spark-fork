@@ -17,39 +17,41 @@
 
 package org.apache.spark.network.sasl;
 
+import org.junit.Test;
+
 import java.nio.ByteBuffer;
 
-import org.junit.Test;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 public class ShuffleSecretManagerSuite {
-  static String app1 = "app1";
-  static String app2 = "app2";
-  static String pw1 = "password1";
-  static String pw2 = "password2";
-  static String pw1update = "password1update";
-  static String pw2update = "password2update";
+    static String app1 = "app1";
+    static String app2 = "app2";
+    static String pw1 = "password1";
+    static String pw2 = "password2";
+    static String pw1update = "password1update";
+    static String pw2update = "password2update";
 
-  @Test
-  public void testMultipleRegisters() {
-    ShuffleSecretManager secretManager = new ShuffleSecretManager();
-    secretManager.registerApp(app1, pw1);
-    assertEquals(pw1, secretManager.getSecretKey(app1));
-    secretManager.registerApp(app2, ByteBuffer.wrap(pw2.getBytes()));
-    assertEquals(pw2, secretManager.getSecretKey(app2));
+    @Test
+    public void testMultipleRegisters() {
+        ShuffleSecretManager secretManager = new ShuffleSecretManager();
+        secretManager.registerApp(app1, pw1);
+        assertEquals(pw1, secretManager.getSecretKey(app1));
+        secretManager.registerApp(app2, ByteBuffer.wrap(pw2.getBytes()));
+        assertEquals(pw2, secretManager.getSecretKey(app2));
 
-    // now update the password for the apps and make sure it takes affect
-    secretManager.registerApp(app1, pw1update);
-    assertEquals(pw1update, secretManager.getSecretKey(app1));
-    secretManager.registerApp(app2, ByteBuffer.wrap(pw2update.getBytes()));
-    assertEquals(pw2update, secretManager.getSecretKey(app2));
+        // now update the password for the apps and make sure it takes affect
+        secretManager.registerApp(app1, pw1update);
+        assertEquals(pw1update, secretManager.getSecretKey(app1));
+        secretManager.registerApp(app2, ByteBuffer.wrap(pw2update.getBytes()));
+        assertEquals(pw2update, secretManager.getSecretKey(app2));
 
-    secretManager.unregisterApp(app1);
-    assertNull(secretManager.getSecretKey(app1));
-    assertEquals(pw2update, secretManager.getSecretKey(app2));
+        secretManager.unregisterApp(app1);
+        assertNull(secretManager.getSecretKey(app1));
+        assertEquals(pw2update, secretManager.getSecretKey(app2));
 
-    secretManager.unregisterApp(app2);
-    assertNull(secretManager.getSecretKey(app2));
-    assertNull(secretManager.getSecretKey(app1));
-  }
+        secretManager.unregisterApp(app2);
+        assertNull(secretManager.getSecretKey(app2));
+        assertNull(secretManager.getSecretKey(app1));
+    }
 }
